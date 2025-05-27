@@ -70,7 +70,10 @@ class DictToAttrRecursive(dict):
 class Worker:
     """
     Args:
+      gpt_path: s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt/s1v3.ckpt
+      sovits_path: s2G488k/s2G2333k/s2Gv3/s2Gv4
       bert_path:
+      cnhubert_base_path:
     """
 
     def __init__(

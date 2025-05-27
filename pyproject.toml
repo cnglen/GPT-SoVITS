@@ -23,6 +23,13 @@ dependencies = [
     "pytorch-lightning>=2.5.1.post0; sys_platform == 'linux'",
     "peft>=0.15.2; sys_platform == 'linux'",
     "x-transformers>=2.3.5; sys_platform == 'linux'",
+
+    # # for mac x86_64, only torch <=2.2.2 supproted
+    # "torch ; sys_platform == 'darwin'",
+    # "torchaudio; sys_platform == 'darwin'",
+    # "pytorch-lightning; sys_platform == 'darwin'",
+    # "peft; sys_platform == 'darwin'",
+    # "x-transformers; sys_platform == 'darwin'",
 ]
 
 [tool.uv.sources]
