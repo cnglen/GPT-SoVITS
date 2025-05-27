@@ -1,0 +1,37 @@
+[project]
+name = "gpt-sovits"
+description = "Add your description here"
+dynamic = ["version"]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cn2an>=0.5.23",
+    "fast-langdetect>=0.3.2",
+    "gradio>=5.31.0",
+    "jieba>=0.42.1",
+    "jieba-fast>=0.53",
+    "librosa>=0.11.0",
+    "matplotlib>=3.10.3",
+    "numba>=0.61.2",
+    "peft>=0.15.2",
+    "pylightkit",
+    "pypinyin>=0.54.0",
+    "pytorch-lightning>=2.5.1.post0",
+    "scipy>=1.15.3",
+    "split-lang>=2.1.0",
+    "torch>=2.7.0",
+    "torchaudio>=2.7.0",
+    "tqdm>=4.67.1",
+    "x-transformers>=2.3.5",
+]
+
+[tool.uv.sources]
+pylightkit = { path = "/home/touch/study/sdk/pylightkit/dist/pylightkit-0.1.0-py3-none-any.whl" }
+
+
+# [build-system]
+# requires = ["setuptools >= 70.2.0", "setuptools_scm>=8.1.0"]
+# build-backend = "setuptools.build_meta"
+
+# [tool.setuptools_scm]
+# root = "../.." # location of .git

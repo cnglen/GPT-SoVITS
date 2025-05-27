@@ -981,6 +981,7 @@ class SynthesizerTrn(nn.Module):
         quantized, codes, commit_loss, quantized_list = self.quantizer(ssl)
         return codes.transpose(0, 1)
 
+
 class CFM(torch.nn.Module):
     def __init__(self, in_channels, dit):
         super().__init__()
@@ -1014,7 +1015,18 @@ class CFM(torch.nn.Module):
             t_tensor = torch.ones(x.shape[0], device=x.device, dtype=mu.dtype) * t
             # v_pred = model(x, t_tensor, d_tensor, **extra_args)
             v_pred, text_emb, dt = self.estimator(
-                x, prompt_x, x_lens, t_tensor, d_tensor, mu, use_grad_ckpt=False, drop_audio_cond=False, drop_text=False, infer=True, text_cache=text_cache, dt_cache=dt_cache
+                x,
+                prompt_x,
+                x_lens,
+                t_tensor,
+                d_tensor,
+                mu,
+                use_grad_ckpt=False,
+                drop_audio_cond=False,
+                drop_text=False,
+                infer=True,
+                text_cache=text_cache,
+                dt_cache=dt_cache,
             )
             v_pred = v_pred.transpose(2, 1)
             if self.use_conditioner_cache:
@@ -1022,18 +1034,18 @@ class CFM(torch.nn.Module):
                 dt_cache = dt
             if inference_cfg_rate > 1e-5:
                 neg, text_cfg_emb, _ = self.estimator(
-                                    x,
-                                    prompt_x,
-                                    x_lens,
-                                    t_tensor,
-                                    d_tensor,
-                                    mu,
-                                    use_grad_ckpt=False,
-                                    drop_audio_cond=True,
-                                    drop_text=True,
-                                    infer=True, 
-                                    text_cache=text_cfg_cache, 
-                                    dt_cache=dt_cache
+                    x,
+                    prompt_x,
+                    x_lens,
+                    t_tensor,
+                    d_tensor,
+                    mu,
+                    use_grad_ckpt=False,
+                    drop_audio_cond=True,
+                    drop_text=True,
+                    infer=True,
+                    text_cache=text_cfg_cache,
+                    dt_cache=dt_cache,
                 )
                 neg = neg.transpose(2, 1)
                 if self.use_conditioner_cache:
