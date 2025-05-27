@@ -13,21 +13,20 @@ dependencies = [
     "librosa>=0.11.0",
     "matplotlib>=3.10.3",
     "numba>=0.61.2",
-    "peft>=0.15.2",
     "pylightkit",
     "pypinyin>=0.54.0",
-    "pytorch-lightning>=2.5.1.post0",
     "scipy>=1.15.3",
     "split-lang>=2.1.0",
-    "torch>=2.7.0",
-    "torchaudio>=2.7.0",
     "tqdm>=4.67.1",
-    "x-transformers>=2.3.5",
+    "torch>=2.7.0 ; sys_platform == 'linux'",
+    "torchaudio>=2.7.0; sys_platform == 'linux'",
+    "pytorch-lightning>=2.5.1.post0; sys_platform == 'linux'",
+    "peft>=0.15.2; sys_platform == 'linux'",
+    "x-transformers>=2.3.5; sys_platform == 'linux'",
 ]
 
 [tool.uv.sources]
-pylightkit = { path = "/home/touch/study/sdk/pylightkit/dist/pylightkit-0.1.0-py3-none-any.whl" }
-
+pylightkit = { path = "/opt/pypi-packages/pylightkit-0.0.0.post1640.dev0+e835891-py3-none-any.whl" }
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -59,6 +58,7 @@ exclude = [
     "site-packages",
     "venv",
 ]
+extend-exclude = ["webui.py", "tools", "src", "api*py"]
 
 # Same as Black.
 line-length = 88

@@ -19,6 +19,7 @@ import numpy as np
 import soundfile as sf
 import torch
 import torchaudio
+from GPT_SoVITS.module.models import Generator, SynthesizerTrn, SynthesizerTrnV3
 from peft import LoraConfig, get_peft_model
 from pylightkit.utils import get_logger
 from tools.audio_sr import AP_BWE
@@ -28,7 +29,6 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 from AR.models.t2s_lightning_module import Text2SemanticLightningModule
 from BigVGAN import bigvgan
 from feature_extractor import cnhubert
-from GPT_SoVITS.module.models import Generator, SynthesizerTrn, SynthesizerTrnV3
 from module.mel_processing import mel_spectrogram_torch, spectrogram_torch
 from process_ckpt import get_sovits_version_from_path_fast, load_sovits_new
 from text import chinese, cleaned_text_to_sequence
@@ -246,9 +246,7 @@ class Worker:
             raise ValueError(f"Only v3/v4 supported, proviced {model_version}")
 
         if if_lora_v3 and (not is_exist):
-            info = "GPT_SoVITS/pretrained_models/s2Gv3.pth" + self.i18n(
-                "SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version
-            )
+            info = "GPT_SoVITS/pretrained_models/s2Gv3.pth" + self.i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
             raise FileExistsError(info)
 
         dict_s2 = load_sovits_new(sovits_path)
@@ -282,7 +280,7 @@ class Worker:
         if "pretrained" not in sovits_path:
             try:
                 del vq_model.enc_q
-            except:
+            except Exception:
                 pass
         if self.is_half:
             vq_model = vq_model.half().to(self.device)
@@ -320,9 +318,7 @@ class Worker:
             f.write(json.dumps(data))
 
         # fixme: versoin/model_version???
-        self.logger.info(
-            f"version: {self.version} -> {version}, model_version: {self.model_version} -> {model_version}"
-        )
+        self.logger.info(f"version: {self.version} -> {version}, model_version: {self.model_version} -> {model_version}")
         self.version, self.model_version = version, model_version
         self.sovits_path = sovits_path
         return hps, vq_model
@@ -555,7 +551,7 @@ class Worker:
             self.hifigan_model = None
             try:
                 torch.cuda.empty_cache()
-            except:
+            except Exception:
                 pass
         if self.is_half:
             bigvgan_model = bigvgan_model.half().to(self.device)
@@ -579,16 +575,14 @@ class Worker:
         )
         hifigan_model.eval()
         hifigan_model.remove_weight_norm()
-        state_dict_g = torch.load(
-            "%s/GPT_SoVITS/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu"
-        )
+        state_dict_g = torch.load("%s/GPT_SoVITS/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu")
         self.logger.info("loading vocoder: {}".format(hifigan_model.load_state_dict(state_dict_g)))
         if self.bigvgan_model:
             self.bigvgan_model = self.bigvgan_model.cpu()
             self.bigvgan_model = None
             try:
                 torch.cuda.empty_cache()
-            except:
+            except Exception:
                 pass
         if self.is_half:
             hifigan_model = hifigan_model.half().to(self.device)
@@ -780,9 +774,9 @@ class Worker:
                             traceback.print_exc()
                 if len(refers) == 0:
                     refers = [self.get_spepc(self.hps, ref_wav_path).to(self.dtype).to(self.device)]
-                audio = self.vq_model.decode(
-                    pred_semantic, torch.LongTensor(phones2).to(self.device).unsqueeze(0), refers, speed=speed
-                )[0][0]  # .cpu().detach().numpy()
+                audio = self.vq_model.decode(pred_semantic, torch.LongTensor(phones2).to(self.device).unsqueeze(0), refers, speed=speed)[0][
+                    0
+                ]  # .cpu().detach().numpy()
             else:
                 refer = self.get_spepc(self.hps, ref_wav_path).to(self.device).to(self.dtype)
                 phoneme_ids0 = torch.LongTensor(phones1).to(self.device).unsqueeze(0)
@@ -892,9 +886,7 @@ class Worker:
             target_text = file.read()
 
         if output_path is None:
-            output_path = os.path.join(
-                os.path.dirname(target_text_path), os.path.basename(target_text_path).split(".")[0] + ".wav"
-            )
+            output_path = os.path.join(os.path.dirname(target_text_path), os.path.basename(target_text_path).split(".")[0] + ".wav")
             self.logger.info(output_path)
 
         # Change model weights
