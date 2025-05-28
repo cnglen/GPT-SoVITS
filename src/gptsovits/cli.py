@@ -19,24 +19,24 @@ import numpy as np
 import soundfile as sf
 import torch
 import torchaudio
-from GPT_SoVITS.module.models import Generator, SynthesizerTrn, SynthesizerTrnV3
 from peft import LoraConfig, get_peft_model
 from pylightkit.utils import get_logger
-from tools.audio_sr import AP_BWE
-from tools.i18n.i18n import I18nAuto
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 from AR.models.t2s_lightning_module import Text2SemanticLightningModule
 from BigVGAN import bigvgan
 from feature_extractor import cnhubert
+from gptsovits.module.models import Generator, SynthesizerTrn, SynthesizerTrnV3
+from gptsovits.process_ckpt import get_sovits_version_from_path_fast, load_sovits_new
+from gptsovits.text import chinese, cleaned_text_to_sequence
+from gptsovits.text.cleaner import clean_text
+from gptsovits.tools.audio_sr import AP_BWE
+from gptsovits.tools.i18n.i18n import I18nAuto
 from module.mel_processing import mel_spectrogram_torch, spectrogram_torch
-from process_ckpt import get_sovits_version_from_path_fast, load_sovits_new
-from text import chinese, cleaned_text_to_sequence
-from text.cleaner import clean_text
 from text.LangSegmenter import LangSegmenter
 
-PATH_SOVITS_V3 = "GPT_SoVITS/pretrained_models/s2Gv3.pth"
-PATH_SOVITS_V4 = "GPT_SoVITS/pretrained_models/gsv-v4-pretrained/s2Gv4.pth"
+PATH_SOVITS_V3 = "src/gptsovits/pretrained_models/s2Gv3.pth"
+PATH_SOVITS_V4 = "src/gptsovits/pretrained_models/gsv-v4-pretrained/s2Gv4.pth"
 
 
 class DictToAttrRecursive(dict):
@@ -83,11 +83,49 @@ class Worker:
         is_half: bool = False,
         device: Optional[str] = None,
         hz: int = 50,
-        bert_path: str = "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large",
-        cnhubert_base_path: str = "GPT_SoVITS/pretrained_models/chinese-hubert-base",
+        bert_path: str = "./src/gptsovits/pretrained_models/chinese-roberta-wwm-ext-large",
+        cnhubert_base_path: str = "./src/gptsovits/pretrained_models/chinese-hubert-base",
         language: str = "zh_CN",
     ):
         self.logger = get_logger("inference", f_log="/tmp/inference.log", f_error="/tmp/inference.err")
+        self.version = self.model_version = os.environ.get("version", "v2")
+        self.logger.info("init: version={}, model_version={}".format(self.version, self.model_version))
+
+        pretrained_sovits_name = [
+            "src/gptsovits/pretrained_models/s2G488k.pth",
+            "src/gptsovits/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth",
+            "src/gptsovits/pretrained_models/s2Gv3.pth",
+            "src/gptsovits/pretrained_models/gsv-v4-pretrained/s2Gv4.pth",
+        ]
+        pretrained_gpt_name = [
+            "src/gptsovits/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
+            "src/gptsovits/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
+            "src/gptsovits/pretrained_models/s1v3.ckpt",
+            "src/gptsovits/pretrained_models/s1v3.ckpt",
+        ]
+
+        _ = [[], []]
+        for i in range(4):
+            if os.path.exists(pretrained_gpt_name[i]):
+                _[0].append(pretrained_gpt_name[i])
+            if os.path.exists(pretrained_sovits_name[i]):
+                _[-1].append(pretrained_sovits_name[i])
+        pretrained_gpt_name, pretrained_sovits_name = _
+
+        if not os.path.exists("./weight.json"):
+            with open("./weight.json", "w", encoding="utf-8") as f:
+                json.dump({"GPT": {}, "SoVITS": {}}, f)
+
+        with open("./weight.json", "r", encoding="utf-8") as f:
+            weight_data = f.read()
+            weight_data = json.loads(weight_data)
+            gpt_path = os.environ.get("gpt_path", weight_data.get("GPT", {}).get(self.version, pretrained_gpt_name))
+            sovits_path = os.environ.get("sovits_path", weight_data.get("SoVITS", {}).get(self.version, pretrained_sovits_name))
+            if isinstance(gpt_path, list):
+                gpt_path = gpt_path[0]
+            if isinstance(sovits_path, list):
+                sovits_path = sovits_path[0]
+            self.logger.info(f"{gpt_path}, {sovits_path}")
 
         self.mel_fn = lambda x: mel_spectrogram_torch(
             x,
@@ -147,8 +185,6 @@ class Worker:
             ssl_model = ssl_model.half()
         self.ssl_model = ssl_model.to(self.device)
 
-        self.version = self.model_version = os.environ.get("version", "v2")
-        self.logger.info("init: version={}, model_version={}".format(self.version, self.model_version))
         self.config, self.t2s_model = self.change_gpt_weights(gpt_path)
         self.hps, self.vq_model = self.change_sovits_weights(sovits_path)
 
@@ -238,6 +274,7 @@ class Worker:
           sovits_path:
         """
         version, model_version, if_lora_v3 = get_sovits_version_from_path_fast(sovits_path)
+        self.logger.info(f"sovit_path={sovits_path}, version={version}, model_version={model_version}, if_lora_v3={if_lora_v3}")
 
         if model_version == "v3":
             is_exist = os.path.exists(PATH_SOVITS_V3)
@@ -249,7 +286,7 @@ class Worker:
             raise ValueError(f"Only v3/v4 supported, proviced {model_version}")
 
         if if_lora_v3 and (not is_exist):
-            info = "GPT_SoVITS/pretrained_models/s2Gv3.pth" + self.i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
+            info = "src/gptsovits/pretrained_models/s2Gv3.pth" + self.i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
             raise FileExistsError(info)
 
         dict_s2 = load_sovits_new(sovits_path)
@@ -263,7 +300,7 @@ class Worker:
         else:
             hps.model.version = "v2"
         version = hps.model.version
-        # print("sovits版本:",hps.model.version)
+        self.logger.info("sovits版本: {}".format(hps.model.version))
         if model_version not in {"v3", "v4"}:
             vq_model = SynthesizerTrn(
                 hps.data.filter_length // 2 + 1,
@@ -292,12 +329,13 @@ class Worker:
         vq_model.eval()
 
         if not if_lora_v3:
-            print("loading sovits_%s" % model_version, vq_model.load_state_dict(dict_s2["weight"], strict=False))
+            self.logger.info("loading sovits_{}: {}".format(model_version, vq_model.load_state_dict(dict_s2["weight"], strict=False)))
         else:
             path_sovits = PATH_SOVITS_V3 if model_version == "v3" else PATH_SOVITS_V4
-            print(
-                "loading sovits_%spretrained_G" % model_version,
-                vq_model.load_state_dict(load_sovits_new(path_sovits)["weight"], strict=False),
+            self.logger.info(
+                "if_lora_v3 loading sovits_{}pretrained_G".format(
+                    model_version, vq_model.load_state_dict(load_sovits_new(path_sovits)["weight"], strict=False)
+                ),
             )
             lora_rank = dict_s2["lora_rank"]
             lora_config = LoraConfig(
@@ -307,7 +345,7 @@ class Worker:
                 init_lora_weights=True,
             )
             vq_model.cfm = get_peft_model(vq_model.cfm, lora_config)
-            print("loading sovits_%s_lora%s" % (model_version, lora_rank))
+            self.logger.info("loading sovits_{}_lora{}".format(model_version, lora_rank))
             vq_model.load_state_dict(dict_s2["weight"], strict=False)
             vq_model.cfm = vq_model.cfm.merge_and_unload()
             # torch.save(vq_model.state_dict(),"merge_win.pth")
@@ -543,7 +581,7 @@ class Worker:
     def init_bigvgan(self):
         now_dir = os.getcwd()
         bigvgan_model = bigvgan.BigVGAN.from_pretrained(
-            "%s/GPT_SoVITS/pretrained_models/models--nvidia--bigvgan_v2_24khz_100band_256x" % (now_dir,),
+            "%s/gptsovits/pretrained_models/models--nvidia--bigvgan_v2_24khz_100band_256x" % (now_dir,),
             use_cuda_kernel=False,
         )  # if True, RuntimeError: Ninja is required to load C++ extensions
         # remove weight norm in the model and set to eval mode
@@ -578,7 +616,7 @@ class Worker:
         )
         hifigan_model.eval()
         hifigan_model.remove_weight_norm()
-        state_dict_g = torch.load("%s/GPT_SoVITS/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu")
+        state_dict_g = torch.load("%s/gptsovits/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu")
         self.logger.info("loading vocoder: {}".format(hifigan_model.load_state_dict(state_dict_g)))
         if self.bigvgan_model:
             self.bigvgan_model = self.bigvgan_model.cpu()
@@ -893,10 +931,8 @@ class Worker:
             self.logger.info(output_path)
 
         # Change model weights
-        if self.gpt_path != GPT_model_path:
-            self.config, self.t2s_model = self.change_gpt_weights(gpt_path=GPT_model_path)
-        if self.sovits_path != SoVITS_model_path:
-            self.hps, self.vq_model = self.change_sovits_weights(sovits_path=SoVITS_model_path)
+        self.config, self.t2s_model = self.change_gpt_weights(gpt_path=GPT_model_path)
+        self.hps, self.vq_model = self.change_sovits_weights(sovits_path=SoVITS_model_path)
 
         # Synthesize audio
         synthesis_result = self.get_tts_wav(
@@ -924,13 +960,13 @@ def main():
         "--gpt_model",
         required=False,
         help="Path to the GPT model file",
-        default="GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
+        default="gptsovits/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
     )
     parser.add_argument(
         "--sovits_model",
         required=False,
         help="Path to the SoVITS model file",
-        default="GPT_SoVITS/pretrained_models/s2G488k.pth",
+        default="gptsovits/pretrained_models/s2G488k.pth",
     )
     parser.add_argument("--ref_audio", required=True, help="Path to the reference audio file")
     parser.add_argument("--ref_text", required=True, help="Path to the reference text file")

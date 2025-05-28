@@ -1,28 +1,25 @@
 import warnings
 
 warnings.filterwarnings("ignore")
+import contextlib
 import math
+import random
 
 import torch
-from torch import nn
-from torch.nn import functional as F
-
-from module import commons
-from module import modules
-from module import attentions
 from f5_tts.model import DiT
-from torch.nn import Conv1d, ConvTranspose1d, Conv2d
-from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
-from module.commons import init_weights, get_padding
-from module.mrte_model import MRTE
-from module.quantize import ResidualVectorQuantizer
-
+from gptsovits.module import attentions, commons, modules
 # from text import symbols
 from text import symbols as symbols_v1
 from text import symbols2 as symbols_v2
+from torch import nn
 from torch.cuda.amp import autocast
-import contextlib
-import random
+from torch.nn import Conv1d, Conv2d, ConvTranspose1d
+from torch.nn import functional as F
+from torch.nn.utils import remove_weight_norm, spectral_norm, weight_norm
+
+from module.commons import get_padding, init_weights
+from module.mrte_model import MRTE
+from module.quantize import ResidualVectorQuantizer
 
 
 class StochasticDurationPredictor(nn.Module):
@@ -186,9 +183,7 @@ class TextEncoder(nn.Module):
             p_dropout,
         )
 
-        self.encoder_text = attentions.Encoder(
-            hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout
-        )
+        self.encoder_text = attentions.Encoder(hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout)
 
         if self.version == "v1":
             symbols = symbols_v1.symbols
@@ -338,9 +333,7 @@ class PosteriorEncoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(
-        self, in_channels, out_channels, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=0
-    ):
+    def __init__(self, in_channels, out_channels, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=0):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -678,11 +671,7 @@ class Quantizer_module(torch.nn.Module):
         self.embedding.weight.data.uniform_(-1.0 / n_e, 1.0 / n_e)
 
     def forward(self, x):
-        d = (
-            torch.sum(x**2, 1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, 1)
-            - 2 * torch.matmul(x, self.embedding.weight.T)
-        )
+        d = torch.sum(x**2, 1, keepdim=True) + torch.sum(self.embedding.weight**2, 1) - 2 * torch.matmul(x, self.embedding.weight.T)
         min_indicies = torch.argmin(d, 1)
         z_q = self.embedding(min_indicies)
         return z_q, min_indicies
@@ -692,9 +681,7 @@ class Quantizer(torch.nn.Module):
     def __init__(self, embed_dim=512, n_code_groups=4, n_codes=160):
         super(Quantizer, self).__init__()
         assert embed_dim % n_code_groups == 0
-        self.quantizer_modules = nn.ModuleList(
-            [Quantizer_module(n_codes, embed_dim // n_code_groups) for _ in range(n_code_groups)]
-        )
+        self.quantizer_modules = nn.ModuleList([Quantizer_module(n_codes, embed_dim // n_code_groups) for _ in range(n_code_groups)])
         self.n_code_groups = n_code_groups
         self.embed_dim = embed_dim
 
@@ -1149,9 +1136,7 @@ class SynthesizerTrnV3(nn.Module):
 
         self.model_dim = 512
         self.use_sdp = use_sdp
-        self.enc_p = TextEncoder(
-            inter_channels, hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout
-        )
+        self.enc_p = TextEncoder(inter_channels, hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout)
         # self.ref_enc = modules.MelStyleEncoder(spec_channels, style_vector_dim=gin_channels)###Rollback
         self.ref_enc = modules.MelStyleEncoder(704, style_vector_dim=gin_channels)  ###Rollback
         # self.dec = Generator(inter_channels, resblock, resblock_kernel_sizes, resblock_dilation_sizes, upsample_rates,
@@ -1183,9 +1168,7 @@ class SynthesizerTrnV3(nn.Module):
             set_no_grad(self.quantizer)
             set_no_grad(self.enc_p)
 
-    def forward(
-        self, ssl, y, mel, ssl_lengths, y_lengths, text, text_lengths, mel_lengths, use_grad_ckpt
-    ):  # ssl_lengths no need now
+    def forward(self, ssl, y, mel, ssl_lengths, y_lengths, text, text_lengths, mel_lengths, use_grad_ckpt):  # ssl_lengths no need now
         with autocast(enabled=False):
             y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y.size(2)), 1).to(y.dtype)
             ge = self.ref_enc(y[:, :704] * y_mask, y_mask)
@@ -1201,9 +1184,7 @@ class SynthesizerTrnV3(nn.Module):
                 x, m_p, logs_p, y_mask = self.enc_p(quantized, y_lengths, text, text_lengths, ge)
         fea = self.bridge(x)
         fea = F.interpolate(fea, scale_factor=(1.875 if self.version == "v3" else 2), mode="nearest")  ##BCT
-        fea, y_mask_ = self.wns1(
-            fea, mel_lengths, ge
-        )  ##If the 1-minute fine-tuning works fine, no need to manually adjust the learning rate.
+        fea, y_mask_ = self.wns1(fea, mel_lengths, ge)  ##If the 1-minute fine-tuning works fine, no need to manually adjust the learning rate.
         B = ssl.shape[0]
         prompt_len_max = mel_lengths * 2 / 3
         prompt_len = (torch.rand([B], device=fea.device) * prompt_len_max).floor().to(dtype=torch.long)
@@ -1295,9 +1276,7 @@ class SynthesizerTrnV3b(nn.Module):
 
         self.model_dim = 512
         self.use_sdp = use_sdp
-        self.enc_p = TextEncoder(
-            inter_channels, hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout
-        )
+        self.enc_p = TextEncoder(inter_channels, hidden_channels, filter_channels, n_heads, n_layers, kernel_size, p_dropout)
         # self.ref_enc = modules.MelStyleEncoder(spec_channels, style_vector_dim=gin_channels)###Rollback
         self.ref_enc = modules.MelStyleEncoder(704, style_vector_dim=gin_channels)  ###Rollback
         self.dec = Generator(
@@ -1310,9 +1289,7 @@ class SynthesizerTrnV3b(nn.Module):
             upsample_kernel_sizes,
             gin_channels=gin_channels,
         )
-        self.enc_q = PosteriorEncoder(
-            spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels
-        )
+        self.enc_q = PosteriorEncoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
         self.flow = ResidualCouplingBlock(inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
 
         ssl_dim = 768

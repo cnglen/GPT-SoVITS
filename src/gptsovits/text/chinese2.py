@@ -2,7 +2,7 @@ import os
 import re
 
 import cn2an
-from pypinyin import lazy_pinyin, Style
+from pypinyin import Style, lazy_pinyin
 from pypinyin.contrib.tone_convert import to_finals_tone3, to_initials
 
 from text.symbols import punctuation
@@ -13,12 +13,12 @@ normalizer = lambda x: cn2an.transform(x, "an2cn")
 
 current_file_path = os.path.dirname(__file__)
 pinyin_to_symbol_map = {
-    line.split("\t")[0]: line.strip().split("\t")[1]
-    for line in open(os.path.join(current_file_path, "opencpop-strict.txt")).readlines()
+    line.split("\t")[0]: line.strip().split("\t")[1] for line in open(os.path.join(current_file_path, "opencpop-strict.txt")).readlines()
 }
 
-import jieba_fast
 import logging
+
+import jieba_fast
 
 jieba_fast.setLogLevel(logging.CRITICAL)
 import jieba_fast.posseg as psg
@@ -32,8 +32,8 @@ if is_g2pw:
 
     parent_directory = os.path.dirname(current_file_path)
     g2pw = G2PWPinyin(
-        model_dir="GPT_SoVITS/text/G2PWModel",
-        model_source=os.environ.get("bert_path", "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large"),
+        model_dir="src/gptsovits/text/G2PWModel",
+        model_source=os.environ.get("bert_path", "src/gptsovits/pretrained_models/chinese-roberta-wwm-ext-large"),
         v_to_u=False,
         neutral_tone_with_five=True,
     )
@@ -162,13 +162,7 @@ def _merge_erhua(initials: list[str], finals: list[str], word: str, pos: str) ->
     new_initials = []
     new_finals = []
     for i, phn in enumerate(finals):
-        if (
-            i == len(finals) - 1
-            and word[i] == "儿"
-            and phn in {"er2", "er5"}
-            and word[-2:] not in not_erhua
-            and new_finals
-        ):
+        if i == len(finals) - 1 and word[i] == "儿" and phn in {"er2", "er5"} and word[-2:] not in not_erhua and new_finals:
             phn = "er" + new_finals[-1][-1]
 
         new_initials.append(initials[i])

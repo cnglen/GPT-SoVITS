@@ -1,7 +1,8 @@
 [project]
-name = "gpt-sovits"
+name = "gptsovits"
 description = "Add your description here"
-dynamic = ["version"]
+version = "0.1.0"
+# dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -23,17 +24,18 @@ dependencies = [
     "pytorch-lightning>=2.5.1.post0; sys_platform == 'linux'",
     "peft>=0.15.2; sys_platform == 'linux'",
     "x-transformers>=2.3.5; sys_platform == 'linux'",
-
     # # for mac x86_64, only torch <=2.2.2 supproted
     # "torch ; sys_platform == 'darwin'",
     # "torchaudio; sys_platform == 'darwin'",
     # "pytorch-lightning; sys_platform == 'darwin'",
     # "peft; sys_platform == 'darwin'",
     # "x-transformers; sys_platform == 'darwin'",
+    "onnxruntime>=1.22.0",
+    "opencc>=1.1.9",
 ]
 
 [tool.uv.sources]
-pylightkit = { path = "/opt/pypi-packages/pylightkit-0.0.0.post1640.dev0+e835891-py3-none-any.whl" }
+pylightkit = { path = "/opt/pypi-packages/pylightkit-0.1.0-py3-none-any.whl" }
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -115,9 +117,19 @@ docstring-code-format = false
 # enabled.
 docstring-code-line-length = "dynamic"
 
-# [build-system]
-# requires = ["setuptools >= 70.2.0", "setuptools_scm>=8.1.0"]
-# build-backend = "setuptools.build_meta"
+
+[build-system]
+# requires = ["hatchling", "uv-dynamic-versioning"]
+# build-backend = "hatchling.build"
+requires = ["uv_build>=0.7.8,<0.8.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "pytest>=8.3.5",
+    "ruff>=0.11.11",
+]
 
 # [tool.setuptools_scm]
 # root = "../.." # location of .git

@@ -10,22 +10,12 @@ d - dimension
 from __future__ import annotations
 
 import torch
+from gptsovits.f5_tts.model.modules import (AdaLayerNormZero_Final, ConvNeXtV2Block, ConvPositionEmbedding, DiTBlock, TimestepEmbedding,
+                                            get_pos_embed_indices, precompute_freqs_cis)
+from module.commons import sequence_mask
 from torch import nn
 from torch.utils.checkpoint import checkpoint
-
 from x_transformers.x_transformers import RotaryEmbedding
-
-from GPT_SoVITS.f5_tts.model.modules import (
-    TimestepEmbedding,
-    ConvNeXtV2Block,
-    ConvPositionEmbedding,
-    DiTBlock,
-    AdaLayerNormZero_Final,
-    precompute_freqs_cis,
-    get_pos_embed_indices,
-)
-
-from module.commons import sequence_mask
 
 
 class TextEmbedding(nn.Module):
@@ -35,9 +25,7 @@ class TextEmbedding(nn.Module):
             self.extra_modeling = True
             self.precompute_max_pos = 4096  # ~44s of 24khz audio
             self.register_buffer("freqs_cis", precompute_freqs_cis(text_dim, self.precompute_max_pos), persistent=False)
-            self.text_blocks = nn.Sequential(
-                *[ConvNeXtV2Block(text_dim, text_dim * conv_mult) for _ in range(conv_layers)]
-            )
+            self.text_blocks = nn.Sequential(*[ConvNeXtV2Block(text_dim, text_dim * conv_mult) for _ in range(conv_layers)])
         else:
             self.extra_modeling = False
 
