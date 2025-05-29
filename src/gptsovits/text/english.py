@@ -1,15 +1,13 @@
-import pickle
 import os
+import pickle
 import re
+from builtins import str as unicode
+
 import wordsegment
 from g2p_en import G2p
-
-from text.symbols import punctuation
-
-from text.symbols2 import symbols
-
-from builtins import str as unicode
-from text.en_normalization.expend import normalize
+from gptsovits.text.en_normalization.expend import normalize
+from gptsovits.text.symbols import punctuation
+from gptsovits.text.symbols2 import symbols
 from nltk.tokenize import TweetTokenizer
 
 word_tokenize = TweetTokenizer().tokenize

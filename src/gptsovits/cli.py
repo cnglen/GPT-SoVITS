@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import sys
 import traceback
 from time import time as ttime
 from typing import Optional, Tuple
@@ -23,17 +24,19 @@ from peft import LoraConfig, get_peft_model
 from pylightkit.utils import get_logger
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-from AR.models.t2s_lightning_module import Text2SemanticLightningModule
-from BigVGAN import bigvgan
-from feature_extractor import cnhubert
+from gptsovits.AR.models.t2s_lightning_module import Text2SemanticLightningModule
+from gptsovits.BigVGAN import bigvgan
+from gptsovits.feature_extractor import cnhubert
+from gptsovits.module.mel_processing import mel_spectrogram_torch, spectrogram_torch
 from gptsovits.module.models import Generator, SynthesizerTrn, SynthesizerTrnV3
 from gptsovits.process_ckpt import get_sovits_version_from_path_fast, load_sovits_new
 from gptsovits.text import chinese, cleaned_text_to_sequence
 from gptsovits.text.cleaner import clean_text
+from gptsovits.text.LangSegmenter import LangSegmenter
 from gptsovits.tools.audio_sr import AP_BWE
 from gptsovits.tools.i18n.i18n import I18nAuto
-from module.mel_processing import mel_spectrogram_torch, spectrogram_torch
-from text.LangSegmenter import LangSegmenter
+
+print(sys.path)
 
 PATH_SOVITS_V3 = "src/gptsovits/pretrained_models/s2Gv3.pth"
 PATH_SOVITS_V4 = "src/gptsovits/pretrained_models/gsv-v4-pretrained/s2Gv4.pth"

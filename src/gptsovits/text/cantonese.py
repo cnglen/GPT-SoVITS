@@ -1,11 +1,11 @@
 # reference: https://huggingface.co/spaces/Naozumi0512/Bert-VITS2-Cantonese-Yue/blob/main/text/chinese.py
 
 import re
+
 import cn2an
 import ToJyutping
-
-from text.symbols import punctuation
-from text.zh_normalization.text_normlization import TextNormalizer
+from gptsovits.text.symbols import punctuation
+from gptsovits.text.zh_normalization.text_normlization import TextNormalizer
 
 normalizer = lambda x: cn2an.transform(x, "an2cn")
 
