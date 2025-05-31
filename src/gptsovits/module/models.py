@@ -6,20 +6,19 @@ import math
 import random
 
 import torch
-from f5_tts.model import DiT
+from gptsovits.f5_tts.model import DiT
 from gptsovits.module import attentions, commons, modules
-# from text import symbols
-from text import symbols as symbols_v1
-from text import symbols2 as symbols_v2
+from gptsovits.module.commons import get_padding, init_weights
+from gptsovits.module.mrte_model import MRTE
+from gptsovits.module.quantize import ResidualVectorQuantizer
+# from gptsovits.text import symbols
+from gptsovits.text import symbols as symbols_v1
+from gptsovits.text import symbols2 as symbols_v2
 from torch import nn
 from torch.cuda.amp import autocast
 from torch.nn import Conv1d, Conv2d, ConvTranspose1d
 from torch.nn import functional as F
 from torch.nn.utils import remove_weight_norm, spectral_norm, weight_norm
-
-from module.commons import get_padding, init_weights
-from module.mrte_model import MRTE
-from module.quantize import ResidualVectorQuantizer
 
 
 class StochasticDurationPredictor(nn.Module):

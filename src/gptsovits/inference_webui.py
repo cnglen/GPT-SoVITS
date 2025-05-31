@@ -17,7 +17,8 @@ import warnings
 
 import torch
 import torchaudio
-from text.LangSegmenter import LangSegmenter
+
+from gptsovits.text.LangSegmenter import LangSegmenter
 
 logging.getLogger("markdown_it").setLevel(logging.ERROR)
 logging.getLogger("urllib3").setLevel(logging.ERROR)
@@ -91,8 +92,9 @@ punctuation = set(["!", "?", "…", ",", ".", "-", " "])
 import gradio as gr
 import librosa
 import numpy as np
-from feature_extractor import cnhubert
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+from feature_extractor import cnhubert
 
 cnhubert.cnhubert_base_path = cnhubert_base_path
 
@@ -116,11 +118,11 @@ def set_seed(seed):
 
 from time import time as ttime
 
-from AR.models.t2s_lightning_module import Text2SemanticLightningModule
 from peft import LoraConfig, get_peft_model
+
+from AR.models.t2s_lightning_module import Text2SemanticLightningModule
 from text import cleaned_text_to_sequence
 from text.cleaner import clean_text
-
 from tools.i18n.i18n import I18nAuto, scan_language_list
 
 language = os.environ.get("language", "Auto")
@@ -239,9 +241,7 @@ def change_sovits_weights(sovits_path, prompt_language=None, text_language=None)
     print(sovits_path, version, model_version, if_lora_v3)
     is_exist = is_exist_s2gv3 if model_version == "v3" else is_exist_s2gv4
     if if_lora_v3 == True and is_exist == False:
-        info = "GPT_SoVITS/pretrained_models/s2Gv3.pth" + i18n(
-            "SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version
-        )
+        info = "GPT_SoVITS/pretrained_models/s2Gv3.pth" + i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
         gr.Warning(info)
         raise FileExistsError(info)
     dict_language = dict_language_v1 if version == "v1" else dict_language_v2
@@ -444,9 +444,7 @@ def init_hifigan():
     )
     hifigan_model.eval()
     hifigan_model.remove_weight_norm()
-    state_dict_g = torch.load(
-        "%s/GPT_SoVITS/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu"
-    )
+    state_dict_g = torch.load("%s/GPT_SoVITS/pretrained_models/gsv-v4-pretrained/vocoder.pth" % (now_dir,), map_location="cpu")
     print("loading vocoder", hifigan_model.load_state_dict(state_dict_g))
     if bigvgan_model:
         bigvgan_model = bigvgan_model.cpu()
@@ -833,9 +831,9 @@ def get_tts_wav(
                         traceback.print_exc()
             if len(refers) == 0:
                 refers = [get_spepc(hps, ref_wav_path).to(dtype).to(device)]
-            audio = vq_model.decode(
-                pred_semantic, torch.LongTensor(phones2).to(device).unsqueeze(0), refers, speed=speed
-            )[0][0]  # .cpu().detach().numpy()
+            audio = vq_model.decode(pred_semantic, torch.LongTensor(phones2).to(device).unsqueeze(0), refers, speed=speed)[0][
+                0
+            ]  # .cpu().detach().numpy()
         else:
             refer = get_spepc(hps, ref_wav_path).to(device).to(dtype)
             phoneme_ids0 = torch.LongTensor(phones1).to(device).unsqueeze(0)
@@ -872,9 +870,7 @@ def get_tts_wav(
                     break
                 idx += chunk_len
                 fea = torch.cat([fea_ref, fea_todo_chunk], 2).transpose(2, 1)
-                cfm_res = vq_model.cfm.inference(
-                    fea, torch.LongTensor([fea.size(1)]).to(fea.device), mel2, sample_steps, inference_cfg_rate=0
-                )
+                cfm_res = vq_model.cfm.inference(fea, torch.LongTensor([fea.size(1)]).to(fea.device), mel2, sample_steps, inference_cfg_rate=0)
                 cfm_res = cfm_res[:, :, mel2.shape[2] :]
                 mel2 = cfm_res[:, :, -T_min:]
                 fea_ref = fea_todo_chunk[:, :, -T_min:]
@@ -1080,11 +1076,7 @@ def html_left(text, label="p"):
 
 
 with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
-    gr.Markdown(
-        value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.")
-        + "<br>"
-        + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE.")
-    )
+    gr.Markdown(value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.") + "<br>" + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE."))
     with gr.Group():
         gr.Markdown(html_center(i18n("模型切换"), "h3"))
         with gr.Row():
@@ -1109,20 +1101,13 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
             inp_ref = gr.Audio(label=i18n("请上传3~10秒内参考音频，超过会报错！"), type="filepath", scale=13)
             with gr.Column(scale=13):
                 ref_text_free = gr.Checkbox(
-                    label=i18n("开启无参考文本模式。不填参考文本亦相当于开启。")
-                    + i18n("v3暂不支持该模式，使用了会报错。"),
+                    label=i18n("开启无参考文本模式。不填参考文本亦相当于开启。") + i18n("v3暂不支持该模式，使用了会报错。"),
                     value=False,
                     interactive=True if model_version not in v3v4set else False,
                     show_label=True,
                     scale=1,
                 )
-                gr.Markdown(
-                    html_left(
-                        i18n("使用无参考文本模式时建议使用微调的GPT")
-                        + "<br>"
-                        + i18n("听不清参考音频说的啥(不晓得写啥)可以开。开启后无视填写的参考文本。")
-                    )
-                )
+                gr.Markdown(html_left(i18n("使用无参考文本模式时建议使用微调的GPT") + "<br>" + i18n("听不清参考音频说的啥(不晓得写啥)可以开。开启后无视填写的参考文本。")))
                 prompt_text = gr.Textbox(label=i18n("参考音频的文本"), value="", lines=5, max_lines=5, scale=1)
             with gr.Column(scale=14):
                 prompt_language = gr.Dropdown(
@@ -1132,16 +1117,12 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                 )
                 inp_refs = (
                     gr.File(
-                        label=i18n(
-                            "可选项：通过拖拽多个文件上传多个参考音频（建议同性），平均融合他们的音色。如不填写此项，音色由左侧单个参考音频控制。如是微调模型，建议参考音频全部在微调训练集音色内，底模不用管。"
-                        ),
+                        label=i18n("可选项：通过拖拽多个文件上传多个参考音频（建议同性），平均融合他们的音色。如不填写此项，音色由左侧单个参考音频控制。如是微调模型，建议参考音频全部在微调训练集音色内，底模不用管。"),
                         file_count="multiple",
                     )
                     if model_version not in v3v4set
                     else gr.File(
-                        label=i18n(
-                            "可选项：通过拖拽多个文件上传多个参考音频（建议同性），平均融合他们的音色。如不填写此项，音色由左侧单个参考音频控制。如是微调模型，建议参考音频全部在微调训练集音色内，底模不用管。"
-                        ),
+                        label=i18n("可选项：通过拖拽多个文件上传多个参考音频（建议同性），平均融合他们的音色。如不填写此项，音色由左侧单个参考音频控制。如是微调模型，建议参考音频全部在微调训练集音色内，底模不用管。"),
                         file_count="multiple",
                         visible=False,
                     )
@@ -1202,9 +1183,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                     scale=1,
                 )
                 with gr.Row():
-                    speed = gr.Slider(
-                        minimum=0.6, maximum=1.65, step=0.05, label=i18n("语速"), value=1, interactive=True, scale=1
-                    )
+                    speed = gr.Slider(minimum=0.6, maximum=1.65, step=0.05, label=i18n("语速"), value=1, interactive=True, scale=1)
                     pause_second_slider = gr.Slider(
                         minimum=0.1,
                         maximum=0.5,
@@ -1215,15 +1194,9 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                         scale=1,
                     )
                 gr.Markdown(html_center(i18n("GPT采样参数(无参考文本时不要太低。不懂就用默认)：")))
-                top_k = gr.Slider(
-                    minimum=1, maximum=100, step=1, label=i18n("top_k"), value=15, interactive=True, scale=1
-                )
-                top_p = gr.Slider(
-                    minimum=0, maximum=1, step=0.05, label=i18n("top_p"), value=1, interactive=True, scale=1
-                )
-                temperature = gr.Slider(
-                    minimum=0, maximum=1, step=0.05, label=i18n("temperature"), value=1, interactive=True, scale=1
-                )
+                top_k = gr.Slider(minimum=1, maximum=100, step=1, label=i18n("top_k"), value=15, interactive=True, scale=1)
+                top_p = gr.Slider(minimum=0, maximum=1, step=0.05, label=i18n("top_p"), value=1, interactive=True, scale=1)
+                temperature = gr.Slider(minimum=0, maximum=1, step=0.05, label=i18n("temperature"), value=1, interactive=True, scale=1)
             # with gr.Column():
             #     gr.Markdown(value=i18n("手工调整音素。当音素框不为空时使用手工音素输入推理，无视目标文本框。"))
             #     phoneme=gr.Textbox(label=i18n("音素框"), value="")

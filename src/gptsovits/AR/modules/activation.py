@@ -2,14 +2,13 @@
 from typing import Optional, Tuple
 
 import torch
+from gptsovits.AR.modules.patched_mha_with_cache import multi_head_attention_forward_patched
 from torch import Tensor
 from torch.nn import Linear, Module
 from torch.nn import functional as F
 from torch.nn.init import constant_, xavier_normal_, xavier_uniform_
 from torch.nn.modules.linear import NonDynamicallyQuantizableLinear
 from torch.nn.parameter import Parameter
-
-from AR.modules.patched_mha_with_cache import multi_head_attention_forward_patched
 
 F.multi_head_attention_forward = multi_head_attention_forward_patched
 
@@ -276,14 +275,10 @@ class MultiheadAttention(Module):
             # they don't!
             why_not_fast_path = "non-self attention was used (query, key, and value are not the same Tensor)"
         elif self.in_proj_bias is not None and query.dtype != self.in_proj_bias.dtype:
-            why_not_fast_path = (
-                f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
-            )
+            why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
         elif self.in_proj_weight is not None and query.dtype != self.in_proj_weight.dtype:
             # this case will fail anyway, but at least they'll get a useful error message.
-            why_not_fast_path = (
-                f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
-            )
+            why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
         elif self.training:
             why_not_fast_path = "training is enabled"
         elif not self.batch_first:
@@ -344,8 +339,7 @@ class MultiheadAttention(Module):
 
         any_nested = query.is_nested or key.is_nested or value.is_nested
         assert not any_nested, (
-            "MultiheadAttention does not support NestedTensor outside of its fast path. "
-            + f"The fast path was not hit because {why_not_fast_path}"
+            "MultiheadAttention does not support NestedTensor outside of its fast path. " + f"The fast path was not hit because {why_not_fast_path}"
         )
 
         if self.batch_first and is_batched:

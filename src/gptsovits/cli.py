@@ -36,10 +36,10 @@ from gptsovits.text.LangSegmenter import LangSegmenter
 from gptsovits.tools.audio_sr import AP_BWE
 from gptsovits.tools.i18n.i18n import I18nAuto
 
-print(sys.path)
-
-PATH_SOVITS_V3 = "src/gptsovits/pretrained_models/s2Gv3.pth"
-PATH_SOVITS_V4 = "src/gptsovits/pretrained_models/gsv-v4-pretrained/s2Gv4.pth"
+PATH_SOVITS_V3 = os.path.join(os.path.dirname(__file__), "pretrained_models/s2Gv3.pth")
+PATH_SOVITS_V4 = os.path.join(os.path.dirname(__file__), "pretrained_models/gsv-v4-pretrained/s2Gv4.pth")
+F_WEIGHT = os.path.join(os.path.dirname(__file__), "weight.json")
+print(PATH_SOVITS_V3)
 
 
 class DictToAttrRecursive(dict):
@@ -81,13 +81,13 @@ class Worker:
 
     def __init__(
         self,
-        gpt_path: str,
-        sovits_path: str,
+        gpt_path: str = os.path.join(os.path.dirname(__file__), "pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"),
+        sovits_path: str = os.path.join(os.path.dirname(__file__), "pretrained_models/s2G488k.pth"),
         is_half: bool = False,
         device: Optional[str] = None,
         hz: int = 50,
-        bert_path: str = "./src/gptsovits/pretrained_models/chinese-roberta-wwm-ext-large",
-        cnhubert_base_path: str = "./src/gptsovits/pretrained_models/chinese-hubert-base",
+        bert_path: str = os.path.join(os.path.dirname(__file__), "pretrained_models/chinese-roberta-wwm-ext-large"),
+        cnhubert_base_path: str = os.path.join(os.path.dirname(__file__), "pretrained_models/chinese-hubert-base"),
         language: str = "zh_CN",
     ):
         self.logger = get_logger("inference", f_log="/tmp/inference.log", f_error="/tmp/inference.err")
@@ -95,16 +95,16 @@ class Worker:
         self.logger.info("init: version={}, model_version={}".format(self.version, self.model_version))
 
         pretrained_sovits_name = [
-            "src/gptsovits/pretrained_models/s2G488k.pth",
-            "src/gptsovits/pretrained_models/gsv-v2final-pretrained/s2G2333k.pth",
-            "src/gptsovits/pretrained_models/s2Gv3.pth",
-            "src/gptsovits/pretrained_models/gsv-v4-pretrained/s2Gv4.pth",
+            os.path.join(os.path.dirname(__file__), "pretrained_models/s2G488k.pth"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/gsv-v2final-pretrained/s2G2333k.pth"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/s2Gv3.pth"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/gsv-v4-pretrained/s2Gv4.pth"),
         ]
         pretrained_gpt_name = [
-            "src/gptsovits/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
-            "src/gptsovits/pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt",
-            "src/gptsovits/pretrained_models/s1v3.ckpt",
-            "src/gptsovits/pretrained_models/s1v3.ckpt",
+            os.path.join(os.path.dirname(__file__), "pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/s1v3.ckpt"),
+            os.path.join(os.path.dirname(__file__), "pretrained_models/s1v3.ckpt"),
         ]
 
         _ = [[], []]
@@ -115,11 +115,11 @@ class Worker:
                 _[-1].append(pretrained_sovits_name[i])
         pretrained_gpt_name, pretrained_sovits_name = _
 
-        if not os.path.exists("./weight.json"):
-            with open("./weight.json", "w", encoding="utf-8") as f:
+        if not os.path.exists(F_WEIGHT):
+            with open(F_WEIGHT, "w", encoding="utf-8") as f:
                 json.dump({"GPT": {}, "SoVITS": {}}, f)
 
-        with open("./weight.json", "r", encoding="utf-8") as f:
+        with open(F_WEIGHT, "r", encoding="utf-8") as f:
             weight_data = f.read()
             weight_data = json.loads(weight_data)
             gpt_path = os.environ.get("gpt_path", weight_data.get("GPT", {}).get(self.version, pretrained_gpt_name))
@@ -258,11 +258,11 @@ class Worker:
         # total = sum([param.nelement() for param in t2s_model.parameters()])
         # print("Number of parameter: %.2fM" % (total / 1e6))
 
-        with open("./weight.json") as f:
+        with open(F_WEIGHT) as f:
             data = f.read()
             data = json.loads(data)
             data["GPT"][self.version] = gpt_path
-        with open("./weight.json", "w") as f:
+        with open(F_WEIGHT, "w") as f:
             f.write(json.dumps(data))
 
         self.gpt_path = gpt_path
@@ -289,7 +289,7 @@ class Worker:
             raise ValueError(f"Only v3/v4 supported, proviced {model_version}")
 
         if if_lora_v3 and (not is_exist):
-            info = "src/gptsovits/pretrained_models/s2Gv3.pth" + self.i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
+            info = os.path.join(os.path.dirname(__file__), "pretrained_models/s2Gv3.pth") + self.i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
             raise FileExistsError(info)
 
         dict_s2 = load_sovits_new(sovits_path)
@@ -354,11 +354,11 @@ class Worker:
             # torch.save(vq_model.state_dict(),"merge_win.pth")
             vq_model.eval()
 
-        with open("./weight.json") as f:
+        with open(F_WEIGHT) as f:
             data = f.read()
             data = json.loads(data)
             data["SoVITS"][version] = sovits_path
-        with open("./weight.json", "w") as f:
+        with open(F_WEIGHT, "w") as f:
             f.write(json.dumps(data))
 
         # fixme: versoin/model_version???

@@ -1,9 +1,10 @@
 import argparse
 import os
+
 import soundfile as sf
 
+from gptsovits.inference_webui import change_gpt_weights, change_sovits_weights, get_tts_wav
 from tools.i18n.i18n import I18nAuto
-from GPT_SoVITS.inference_webui import change_gpt_weights, change_sovits_weights, get_tts_wav
 
 i18n = I18nAuto()
 
@@ -56,9 +57,7 @@ def main():
     parser.add_argument("--sovits_model", required=True, help="Path to the SoVITS model file")
     parser.add_argument("--ref_audio", required=True, help="Path to the reference audio file")
     parser.add_argument("--ref_text", required=True, help="Path to the reference text file")
-    parser.add_argument(
-        "--ref_language", required=True, choices=["中文", "英文", "日文"], help="Language of the reference audio"
-    )
+    parser.add_argument("--ref_language", required=True, choices=["中文", "英文", "日文"], help="Language of the reference audio")
     parser.add_argument("--target_text", required=True, help="Path to the target text file")
     parser.add_argument(
         "--target_language",

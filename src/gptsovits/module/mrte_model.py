@@ -1,9 +1,9 @@
 # This is Multi-reference timbre encoder
 
 import torch
+from gptsovits.module.attentions import MultiHeadAttention
 from torch import nn
 from torch.nn.utils import remove_weight_norm, weight_norm
-from module.attentions import MultiHeadAttention
 
 
 class MRTE(nn.Module):

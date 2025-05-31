@@ -12,7 +12,7 @@ from __future__ import annotations
 import torch
 from gptsovits.f5_tts.model.modules import (AdaLayerNormZero_Final, ConvNeXtV2Block, ConvPositionEmbedding, DiTBlock, TimestepEmbedding,
                                             get_pos_embed_indices, precompute_freqs_cis)
-from module.commons import sequence_mask
+from gptsovits.module.commons import sequence_mask
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 from x_transformers.x_transformers import RotaryEmbedding
