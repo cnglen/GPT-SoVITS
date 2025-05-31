@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-pylightkit = { path = "/opt/pypi-packages/pylightkit-0.1.0-py3-none-any.whl" }
+pylightkit = { workspace = true}
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

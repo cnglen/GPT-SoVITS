@@ -963,16 +963,16 @@ def main():
         "--gpt_model",
         required=False,
         help="Path to the GPT model file",
-        default="gptsovits/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
+        default=os.path.join(os.path.dirname(__file__), "pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"),
     )
     parser.add_argument(
         "--sovits_model",
         required=False,
         help="Path to the SoVITS model file",
-        default="gptsovits/pretrained_models/s2G488k.pth",
+        default=os.path.join(os.path.dirname(__file__), "pretrained_models/s2G488k.pth"),
     )
-    parser.add_argument("--ref_audio", required=True, help="Path to the reference audio file")
-    parser.add_argument("--ref_text", required=True, help="Path to the reference text file")
+    parser.add_argument("--ref_audio", required=False, help="Path to the reference audio file", default=os.path.expanduser("~/data/taiyizhenren.wav"))
+    parser.add_argument("--ref_text", required=False, help="Path to the reference text file", default=os.path.expanduser("~/data/taiyizhenren.txt"))
     parser.add_argument(
         "--ref_language",
         required=False,
@@ -980,7 +980,7 @@ def main():
         help="Language of the reference audio",
         default="中文",
     )
-    parser.add_argument("--target_text", required=True, help="Path to the target text file")
+    parser.add_argument("--target_text", required=False, help="Path to the target text file", default=os.path.expanduser("~/data/demo1.txt"))
     parser.add_argument(
         "--target_language",
         required=False,
