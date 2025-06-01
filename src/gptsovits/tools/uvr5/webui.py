@@ -1,24 +1,22 @@
 import logging
 import os
+import sys
 import traceback
 
+import ffmpeg
 import gradio as gr
-
-from tools.i18n.i18n import I18nAuto
-from tools.my_utils import clean_path
+import torch
+from gptsovits.tools.i18n.i18n import I18nAuto
+from gptsovits.tools.my_utils import clean_path
+from gptsovits.tools.uvr5.bsroformer import Roformer_Loader
+from gptsovits.tools.uvr5.mdxnet import MDXNetDereverb
+from gptsovits.tools.uvr5.vr import AudioPre, AudioPreDeEcho
 
 i18n = I18nAuto()
 
 logger = logging.getLogger(__name__)
-import sys
 
-import ffmpeg
-import torch
-from bsroformer import Roformer_Loader
-from mdxnet import MDXNetDereverb
-from vr import AudioPre, AudioPreDeEcho
-
-weight_uvr5_root = "tools/uvr5/uvr5_weights"
+weight_uvr5_root = os.path.join(os.path.dirname(__file__), "uvr5_weights")
 uvr5_names = []
 for name in os.listdir(weight_uvr5_root):
     if name.endswith(".pth") or name.endswith(".ckpt") or "onnx" in name:
@@ -42,7 +40,33 @@ def html_center(text, label="p"):
                 </div>"""
 
 
-def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg, format0):
+def uvr(
+    model_name: str = "VR-DeEchoAggressive",
+    inp_root: str = "",
+    save_root_vocal: str = "/tmp/uvr_vocal",
+    paths: str | None = None,
+    save_root_ins: str = "/tmp/uvr_vocal",
+    agg: int = 10,
+    format0: str = "wav",
+):
+    """
+    Args:
+      model_name: 模型名称
+        -     HP2_all_vocals, 不好，高频声音
+        -     HP5_only_main_vocal:
+        -     VR-DeEchoNormal: OK
+        -     VR-DeEchoAggressive: OK
+
+      inp_root: 输入文件夹路径
+      paths: 输入文件列表
+      save_root_vocal: 输出主人声文件夹
+      save_root_ins: 非主人声文件夹
+      agg: 人声提取激进程度
+      format0: 导出文件格式 wav/flac/mp3/m4a
+    """
+
+    if paths is None:
+        paths = []
     infos = []
     try:
         inp_root = clean_path(inp_root)
@@ -76,9 +100,10 @@ def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg, format
             paths = [os.path.join(inp_root, name) for name in os.listdir(inp_root)]
         else:
             paths = [path.name for path in paths]
+        print(paths)
         for path in paths:
             inp_path = os.path.join(inp_root, path)
-            if os.path.isfile(inp_path) == False:
+            if not os.path.isfile(inp_path):
                 continue
             need_reformat = 1
             done = 0
@@ -126,11 +151,7 @@ def uvr(model_name, inp_root, save_root_vocal, paths, save_root_ins, agg, format
 
 
 with gr.Blocks(title="UVR5 WebUI", analytics_enabled=False) as app:
-    gr.Markdown(
-        value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.")
-        + "<br>"
-        + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE.")
-    )
+    gr.Markdown(value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.") + "<br>" + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE."))
     with gr.Group():
         gr.Markdown(html_center(i18n("伴奏人声分离&去混响&去回声"), "h2"))
         with gr.Group():
@@ -138,15 +159,11 @@ with gr.Blocks(title="UVR5 WebUI", analytics_enabled=False) as app:
                 value=html_left(
                     i18n("人声伴奏分离批量处理， 使用UVR5模型。")
                     + "<br>"
-                    + i18n(
-                        "合格的文件夹路径格式举例： E:\\codes\\py39\\vits_vc_gpu\\白鹭霜华测试样例(去文件管理器地址栏拷就行了)。"
-                    )
+                    + i18n("合格的文件夹路径格式举例： E:\\codes\\py39\\vits_vc_gpu\\白鹭霜华测试样例(去文件管理器地址栏拷就行了)。")
                     + "<br>"
                     + i18n("模型分为三类：")
                     + "<br>"
-                    + i18n(
-                        "1、保留人声：不带和声的音频选这个，对主人声保留比HP5更好。内置HP2和HP3两个模型，HP3可能轻微漏伴奏但对主人声保留比HP2稍微好一丁点；"
-                    )
+                    + i18n("1、保留人声：不带和声的音频选这个，对主人声保留比HP5更好。内置HP2和HP3两个模型，HP3可能轻微漏伴奏但对主人声保留比HP2稍微好一丁点；")
                     + "<br>"
                     + i18n("2、仅保留主人声：带和声的音频选这个，对主人声可能有削弱。内置HP5一个模型；")
                     + "<br>"
@@ -154,9 +171,7 @@ with gr.Blocks(title="UVR5 WebUI", analytics_enabled=False) as app:
                     + "<br>  "
                     + i18n("(1)MDX-Net(onnx_dereverb):对于双通道混响是最好的选择，不能去除单通道混响；")
                     + "<br>&emsp;"
-                    + i18n(
-                        "(234)DeEcho:去除延迟效果。Aggressive比Normal去除得更彻底，DeReverb额外去除混响，可去除单声道混响，但是对高频重的板式混响去不干净。"
-                    )
+                    + i18n("(234)DeEcho:去除延迟效果。Aggressive比Normal去除得更彻底，DeReverb额外去除混响，可去除单声道混响，但是对高频重的板式混响去不干净。")
                     + "<br>"
                     + i18n("去混响/去延迟，附：")
                     + "<br>"
@@ -175,9 +190,7 @@ with gr.Blocks(title="UVR5 WebUI", analytics_enabled=False) as app:
                         label=i18n("输入待处理音频文件夹路径"),
                         placeholder="C:\\Users\\Desktop\\todo-songs",
                     )
-                    wav_inputs = gr.File(
-                        file_count="multiple", label=i18n("也可批量输入音频文件, 二选一, 优先读文件夹")
-                    )
+                    wav_inputs = gr.File(file_count="multiple", label=i18n("也可批量输入音频文件, 二选一, 优先读文件夹"))
                 with gr.Column():
                     agg = gr.Slider(
                         minimum=0,

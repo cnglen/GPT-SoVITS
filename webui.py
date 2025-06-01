@@ -20,6 +20,8 @@ import psutil
 import torch
 import yaml
 
+from gptsovits.tools.asr.config import asr_dict
+
 os.environ["TORCH_DISTRIBUTED_DEBUG"] = "INFO"
 torch.manual_seed(233333)
 tmp = os.path.join(now_dir, "TEMP")
@@ -64,26 +66,17 @@ import shutil
 import subprocess
 from subprocess import Popen
 
-from config import (
-    exp_root,
-    infer_device,
-    is_half,
-    is_share,
-    python_exec,
-    webui_port_infer_tts,
-    webui_port_main,
-    webui_port_subfix,
-    webui_port_uvr5,
-)
-from tools import my_utils
-from tools.i18n.i18n import I18nAuto, scan_language_list
+from gptsovits.config import (exp_root, infer_device, is_half, is_share, python_exec, webui_port_infer_tts, webui_port_main, webui_port_subfix,
+                              webui_port_uvr5)
+from gptsovits.tools import my_utils
+from gptsovits.tools.i18n.i18n import I18nAuto, scan_language_list
 
 language = sys.argv[-1] if sys.argv[-1] in scan_language_list() else "Auto"
 os.environ["language"] = language
 i18n = I18nAuto(language=language)
 from multiprocessing import cpu_count
 
-from tools.my_utils import check_details, check_for_existance
+from gptsovits.tools.my_utils import check_details, check_for_existance
 
 # os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1' # 当遇到mps不支持的步骤时使用cpu
 try:
@@ -151,16 +144,7 @@ v3v4set = {"v3", "v4"}
 
 
 def set_default():
-    global \
-        default_batch_size, \
-        default_max_batch_size, \
-        gpu_info, \
-        default_sovits_epoch, \
-        default_sovits_save_every_epoch, \
-        max_sovits_epoch, \
-        max_sovits_save_every_epoch, \
-        default_batch_size_s1, \
-        if_force_ckpt
+    global default_batch_size, default_max_batch_size, gpu_info, default_sovits_epoch, default_sovits_save_every_epoch, max_sovits_epoch, max_sovits_save_every_epoch, default_batch_size_s1, if_force_ckpt
     if_force_ckpt = False
     if if_gpu_ok and len(gpu_infos) > 0:
         gpu_info = "\n".join(gpu_infos)
@@ -412,9 +396,11 @@ process_name_uvr5 = i18n("人声分离WebUI")
 
 def change_uvr5():
     global p_uvr5
+    F_UVR5_WEBUI = os.path.join(os.path.dirname(__file__), "src/gptsovits/tools/uvr5/webui.py")
     if p_uvr5 is None:
-        cmd = '"%s" -s tools/uvr5/webui.py "%s" %s %s %s' % (
+        cmd = '"%s" -s %s "%s" %s %s %s' % (
             python_exec,
+            F_UVR5_WEBUI,
             infer_device,
             is_half,
             webui_port_uvr5,
@@ -474,8 +460,6 @@ def change_tts_inference(bert_path, cnhubert_base_path, gpu_number, gpt_path, so
             {"__type__": "update", "visible": False},
         )
 
-
-from tools.asr.config import asr_dict
 
 process_name_asr = i18n("语音识别")
 
@@ -705,9 +689,7 @@ def open1Bb(
 ):
     global p_train_GPT
     if p_train_GPT == None:
-        with open(
-            "GPT_SoVITS/configs/s1longer.yaml" if version == "v1" else "GPT_SoVITS/configs/s1longer-v2.yaml"
-        ) as f:
+        with open("GPT_SoVITS/configs/s1longer.yaml" if version == "v1" else "GPT_SoVITS/configs/s1longer-v2.yaml") as f:
             data = f.read()
             data = yaml.load(data, Loader=yaml.FullLoader)
         s1_dir = "%s/%s" % (exp_root, exp_name)
@@ -1142,8 +1124,7 @@ def open1abc(
             #############################1a
             path_text = "%s/2-name2text.txt" % opt_dir
             if os.path.exists(path_text) == False or (
-                os.path.exists(path_text) == True
-                and len(open(path_text, "r", encoding="utf8").read().strip("\n").split("\n")) < 2
+                os.path.exists(path_text) == True and len(open(path_text, "r", encoding="utf8").read().strip("\n").split("\n")) < 2
             ):
                 config = {
                     "inp_text": inp_text,
@@ -1229,9 +1210,7 @@ def open1abc(
             ps1abc = []
             #############################1c
             path_semantic = "%s/6-name2semantic.tsv" % opt_dir
-            if os.path.exists(path_semantic) == False or (
-                os.path.exists(path_semantic) == True and os.path.getsize(path_semantic) < 31
-            ):
+            if os.path.exists(path_semantic) == False or (os.path.exists(path_semantic) == True and os.path.getsize(path_semantic) < 31):
                 config = {
                     "inp_text": inp_text,
                     "exp_name": exp_name,
@@ -1355,11 +1334,7 @@ def sync(text):
 
 
 with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
-    gr.Markdown(
-        value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.")
-        + "<br>"
-        + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE.")
-    )
+    gr.Markdown(value=i18n("本软件以MIT协议开源, 作者不对软件具备任何控制力, 使用软件者、传播软件导出的声音者自负全责.") + "<br>" + i18n("如不认可该条款, 则不能使用或引用软件包内任何代码和文件. 详见根目录LICENSE."))
     gr.Markdown(value=i18n("中文教程文档") + ": " + "https://www.yuque.com/baicaigongchang1145haoyuangong/ib3g1e")
 
     with gr.Tabs():
@@ -1408,18 +1383,12 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             interactive=True,
                         )
                     with gr.Row():
-                        n_process = gr.Slider(
-                            minimum=1, maximum=n_cpu, step=1, label=i18n("切割使用的进程数"), value=4, interactive=True
-                        )
+                        n_process = gr.Slider(minimum=1, maximum=n_cpu, step=1, label=i18n("切割使用的进程数"), value=4, interactive=True)
                         slicer_info = gr.Textbox(label=process_info(process_name_slice, "info"))
-                open_slicer_button = gr.Button(
-                    value=process_info(process_name_slice, "open"), variant="primary", visible=True
-                )
-                close_slicer_button = gr.Button(
-                    value=process_info(process_name_slice, "close"), variant="primary", visible=False
-                )
+                open_slicer_button = gr.Button(value=process_info(process_name_slice, "open"), variant="primary", visible=True)
+                close_slicer_button = gr.Button(value=process_info(process_name_slice, "close"), variant="primary", visible=False)
 
-            gr.Markdown(value="0bb-" + i18n("语音降噪工具")+i18n("(非必需)"))
+            gr.Markdown(value="0bb-" + i18n("语音降噪工具") + i18n("(非必需)"))
             with gr.Row():
                 with gr.Column(scale=3):
                     with gr.Row():
@@ -1427,20 +1396,14 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                         denoise_output_dir = gr.Textbox(label=i18n("输出文件夹路径"), value="output/denoise_opt")
                     with gr.Row():
                         denoise_info = gr.Textbox(label=process_info(process_name_denoise, "info"))
-                open_denoise_button = gr.Button(
-                    value=process_info(process_name_denoise, "open"), variant="primary", visible=True
-                )
-                close_denoise_button = gr.Button(
-                    value=process_info(process_name_denoise, "close"), variant="primary", visible=False
-                )
+                open_denoise_button = gr.Button(value=process_info(process_name_denoise, "open"), variant="primary", visible=True)
+                close_denoise_button = gr.Button(value=process_info(process_name_denoise, "close"), variant="primary", visible=False)
 
             gr.Markdown(value="0c-" + i18n("语音识别工具"))
             with gr.Row():
                 with gr.Column(scale=3):
                     with gr.Row():
-                        asr_inp_dir = gr.Textbox(
-                            label=i18n("输入文件夹路径"), value="D:\\GPT-SoVITS\\raw\\xxx", interactive=True
-                        )
+                        asr_inp_dir = gr.Textbox(label=i18n("输入文件夹路径"), value="D:\\GPT-SoVITS\\raw\\xxx", interactive=True)
                         asr_opt_dir = gr.Textbox(label=i18n("输出文件夹路径"), value="output/asr_opt", interactive=True)
                     with gr.Row():
                         asr_model = gr.Dropdown(
@@ -1449,23 +1412,13 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             interactive=True,
                             value="达摩 ASR (中文)",
                         )
-                        asr_size = gr.Dropdown(
-                            label=i18n("ASR 模型尺寸"), choices=["large"], interactive=True, value="large"
-                        )
-                        asr_lang = gr.Dropdown(
-                            label=i18n("ASR 语言设置"), choices=["zh", "yue"], interactive=True, value="zh"
-                        )
-                        asr_precision = gr.Dropdown(
-                            label=i18n("数据类型精度"), choices=["float32"], interactive=True, value="float32"
-                        )
+                        asr_size = gr.Dropdown(label=i18n("ASR 模型尺寸"), choices=["large"], interactive=True, value="large")
+                        asr_lang = gr.Dropdown(label=i18n("ASR 语言设置"), choices=["zh", "yue"], interactive=True, value="zh")
+                        asr_precision = gr.Dropdown(label=i18n("数据类型精度"), choices=["float32"], interactive=True, value="float32")
                     with gr.Row():
                         asr_info = gr.Textbox(label=process_info(process_name_asr, "info"))
-                open_asr_button = gr.Button(
-                    value=process_info(process_name_asr, "open"), variant="primary", visible=True
-                )
-                close_asr_button = gr.Button(
-                    value=process_info(process_name_asr, "close"), variant="primary", visible=False
-                )
+                open_asr_button = gr.Button(value=process_info(process_name_asr, "open"), variant="primary", visible=True)
+                close_asr_button = gr.Button(value=process_info(process_name_asr, "close"), variant="primary", visible=False)
 
                 def change_lang_choices(key):  # 根据选择的模型修改可选的语言
                     return {"__type__": "update", "choices": asr_dict[key]["lang"], "value": asr_dict[key]["lang"][0]}
@@ -1500,9 +1453,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                         )
                         label_info = gr.Textbox(label=process_info(process_name_subfix, "info"))
                 open_label = gr.Button(value=process_info(process_name_subfix, "open"), variant="primary", visible=True)
-                close_label = gr.Button(
-                    value=process_info(process_name_subfix, "close"), variant="primary", visible=False
-                )
+                close_label = gr.Button(value=process_info(process_name_subfix, "close"), variant="primary", visible=False)
 
             open_label.click(change_label, [path_list], [label_info, open_label, close_label])
             close_label.click(change_label, [path_list], [label_info, open_label, close_label])
@@ -1556,9 +1507,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             label=i18n("*训练集音频文件目录"),
                             # value=r"D:\RVC1006\GPT-SoVITS\raw\xxx",
                             interactive=True,
-                            placeholder=i18n(
-                                "填切割后音频所在目录！读取的音频文件完整路径=该目录-拼接-list文件里波形对应的文件名（不是全路径）。如果留空则使用.list文件里的绝对全路径。"
-                            ),
+                            placeholder=i18n("填切割后音频所在目录！读取的音频文件完整路径=该目录-拼接-list文件里波形对应的文件名（不是全路径）。如果留空则使用.list文件里的绝对全路径。"),
                             scale=10,
                         )
 
@@ -1578,12 +1527,8 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             lines=2,
                         )
                     with gr.Row():
-                        button1a_open = gr.Button(
-                            value=process_info(process_name_1a, "open"), variant="primary", visible=True
-                        )
-                        button1a_close = gr.Button(
-                            value=process_info(process_name_1a, "close"), variant="primary", visible=False
-                        )
+                        button1a_open = gr.Button(value=process_info(process_name_1a, "open"), variant="primary", visible=True)
+                        button1a_close = gr.Button(value=process_info(process_name_1a, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1a = gr.Textbox(label=process_info(process_name_1a, "info"))
 
@@ -1603,12 +1548,8 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             lines=2,
                         )
                     with gr.Row():
-                        button1b_open = gr.Button(
-                            value=process_info(process_name_1b, "open"), variant="primary", visible=True
-                        )
-                        button1b_close = gr.Button(
-                            value=process_info(process_name_1b, "close"), variant="primary", visible=False
-                        )
+                        button1b_open = gr.Button(value=process_info(process_name_1b, "open"), variant="primary", visible=True)
+                        button1b_close = gr.Button(value=process_info(process_name_1b, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1b = gr.Textbox(label=process_info(process_name_1b, "info"))
 
@@ -1628,24 +1569,16 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                             lines=2,
                         )
                     with gr.Row():
-                        button1c_open = gr.Button(
-                            value=process_info(process_name_1c, "open"), variant="primary", visible=True
-                        )
-                        button1c_close = gr.Button(
-                            value=process_info(process_name_1c, "close"), variant="primary", visible=False
-                        )
+                        button1c_open = gr.Button(value=process_info(process_name_1c, "open"), variant="primary", visible=True)
+                        button1c_close = gr.Button(value=process_info(process_name_1c, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1c = gr.Textbox(label=process_info(process_name_1c, "info"))
 
                 gr.Markdown(value="1Aabc-" + process_name_1abc)
                 with gr.Row():
                     with gr.Row():
-                        button1abc_open = gr.Button(
-                            value=process_info(process_name_1abc, "open"), variant="primary", visible=True
-                        )
-                        button1abc_close = gr.Button(
-                            value=process_info(process_name_1abc, "close"), variant="primary", visible=False
-                        )
+                        button1abc_open = gr.Button(value=process_info(process_name_1abc, "open"), variant="primary", visible=True)
+                        button1abc_close = gr.Button(value=process_info(process_name_1abc, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1abc = gr.Textbox(label=process_info(process_name_1abc, "info"))
 
@@ -1692,9 +1625,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                 [info1b, button1b_open, button1b_close],
             )
             button1b_close.click(close1b, [], [info1b, button1b_open, button1b_close])
-            button1c_open.click(
-                open1c, [inp_text, exp_name, gpu_numbers1c, pretrained_s2G], [info1c, button1c_open, button1c_close]
-            )
+            button1c_open.click(open1c, [inp_text, exp_name, gpu_numbers1c, pretrained_s2G], [info1c, button1c_open, button1c_close])
             button1c_close.click(close1c, [], [info1c, button1c_open, button1c_close])
             button1abc_open.click(
                 open1abc,
@@ -1779,17 +1710,11 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                                 visible=False,
                             )  # 只有V3s2可以用
                         with gr.Row():
-                            gpu_numbers1Ba = gr.Textbox(
-                                label=i18n("GPU卡号以-分割，每个卡号一个进程"), value="%s" % (gpus), interactive=True
-                            )
+                            gpu_numbers1Ba = gr.Textbox(label=i18n("GPU卡号以-分割，每个卡号一个进程"), value="%s" % (gpus), interactive=True)
                 with gr.Row():
                     with gr.Row():
-                        button1Ba_open = gr.Button(
-                            value=process_info(process_name_sovits, "open"), variant="primary", visible=True
-                        )
-                        button1Ba_close = gr.Button(
-                            value=process_info(process_name_sovits, "close"), variant="primary", visible=False
-                        )
+                        button1Ba_open = gr.Button(value=process_info(process_name_sovits, "open"), variant="primary", visible=True)
+                        button1Ba_close = gr.Button(value=process_info(process_name_sovits, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1Ba = gr.Textbox(label=process_info(process_name_sovits, "info"))
                 gr.Markdown(value="1Bb-" + i18n("GPT 训练: 模型权重文件在 GPT_weights/"))
@@ -1842,17 +1767,11 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                                 show_label=True,
                             )
                         with gr.Row():
-                            gpu_numbers1Bb = gr.Textbox(
-                                label=i18n("GPU卡号以-分割，每个卡号一个进程"), value="%s" % (gpus), interactive=True
-                            )
+                            gpu_numbers1Bb = gr.Textbox(label=i18n("GPU卡号以-分割，每个卡号一个进程"), value="%s" % (gpus), interactive=True)
                 with gr.Row():
                     with gr.Row():
-                        button1Bb_open = gr.Button(
-                            value=process_info(process_name_gpt, "open"), variant="primary", visible=True
-                        )
-                        button1Bb_close = gr.Button(
-                            value=process_info(process_name_gpt, "close"), variant="primary", visible=False
-                        )
+                        button1Bb_open = gr.Button(value=process_info(process_name_gpt, "open"), variant="primary", visible=True)
+                        button1Bb_close = gr.Button(value=process_info(process_name_gpt, "close"), variant="primary", visible=False)
                     with gr.Row():
                         info1Bb = gr.Textbox(label=process_info(process_name_gpt, "info"))
 
@@ -1860,11 +1779,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
             button1Bb_close.click(close1Bb, [], [info1Bb, button1Bb_open, button1Bb_close])
 
             with gr.TabItem("1C-" + i18n("推理")):
-                gr.Markdown(
-                    value=i18n(
-                        "选择训练完存放在SoVITS_weights和GPT_weights下的模型。默认的一个是底模，体验5秒Zero Shot TTS用。"
-                    )
-                )
+                gr.Markdown(value=i18n("选择训练完存放在SoVITS_weights和GPT_weights下的模型。默认的一个是底模，体验5秒Zero Shot TTS用。"))
                 with gr.Row():
                     with gr.Row():
                         GPT_dropdown = gr.Dropdown(
@@ -1885,16 +1800,10 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False) as app:
                     refresh_button.click(fn=change_choices, inputs=[], outputs=[SoVITS_dropdown, GPT_dropdown])
                 with gr.Row():
                     with gr.Row():
-                        batched_infer_enabled = gr.Checkbox(
-                            label=i18n("启用并行推理版本"), value=False, interactive=True, show_label=True
-                        )
+                        batched_infer_enabled = gr.Checkbox(label=i18n("启用并行推理版本"), value=False, interactive=True, show_label=True)
                     with gr.Row():
-                        open_tts = gr.Button(
-                            value=process_info(process_name_tts, "open"), variant="primary", visible=True
-                        )
-                        close_tts = gr.Button(
-                            value=process_info(process_name_tts, "close"), variant="primary", visible=False
-                        )
+                        open_tts = gr.Button(value=process_info(process_name_tts, "open"), variant="primary", visible=True)
+                        close_tts = gr.Button(value=process_info(process_name_tts, "close"), variant="primary", visible=False)
                     with gr.Row():
                         tts_info = gr.Textbox(label=process_info(process_name_tts, "info"))
                     open_tts.click(

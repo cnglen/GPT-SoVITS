@@ -96,11 +96,11 @@ class Roformer_Loader:
 
     def get_model_from_config(self):
         if self.model_type == "bs_roformer":
-            from bs_roformer.bs_roformer import BSRoformer
+            from gptsovits.tools.uvr5.bs_roformer.bs_roformer import BSRoformer
 
             model = BSRoformer(**dict(self.config["model"]))
         elif self.model_type == "mel_band_roformer":
-            from bs_roformer.mel_band_roformer import MelBandRoformer
+            from gptsovits.tools.uvr5.bs_roformer.mel_band_roformer import MelBandRoformer
 
             model = MelBandRoformer(**dict(self.config["model"]))
         else:

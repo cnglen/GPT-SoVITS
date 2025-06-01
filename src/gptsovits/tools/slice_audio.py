@@ -1,21 +1,48 @@
 import os
 import sys
-import numpy as np
 import traceback
+from typing import List
+
+import numpy as np
+from gptsovits.tools.my_utils import load_audio
+from gptsovits.tools.slicer2 import Slicer
 from scipy.io import wavfile
 
-# parent_directory = os.path.dirname(os.path.abspath(__file__))
-# sys.path.append(parent_directory)
-from tools.my_utils import load_audio
-from slicer2 import Slicer
 
+def slice(
+    inp: str | List[str],
+    opt_root: str = "/tmp/audio_slice_output",
+    threshold: int = -34,
+    min_length: int = 4000,
+    min_interval: int = 10,
+    hop_size: int = 10,
+    max_sil_kept: int = 500,
+    _max: float = 0.9,
+    alpha: float = 0.25,
+    i_part: int = 0,
+    all_part: int | None = None,
+):
+    """
+    将输入`inp`进行音频切分
 
-def slice(inp, opt_root, threshold, min_length, min_interval, hop_size, max_sil_kept, _max, alpha, i_part, all_part):
+    Args:
+      inp: 输入文件或文件夹
+      opt_root: 输出文件夹
+      threshold: 音量小于这个值视作静音的备选切割点
+      min_length: 每段最小多长，如果第一段太短一直和后面段连起来直到超过这个值
+      min_interval: # 最短切割间隔
+      hop_size: 怎么算音量曲线，越小精度越大计算量越高（不是精度越大效果越好）
+      max_sil_kept: 切完后静音最多留多长
+      _max:
+      alpha:
+      i_part:
+      all_part:
+    """
     os.makedirs(opt_root, exist_ok=True)
     if os.path.isfile(inp):
-        input = [inp]
+        f_inputs = [inp]
     elif os.path.isdir(inp):
-        input = [os.path.join(inp, name) for name in sorted(list(os.listdir(inp)))]
+        f_inputs = [os.path.join(inp, name) for name in sorted(list(os.listdir(inp)))]
     else:
         return "输入路径存在但既不是文件也不是文件夹"
     slicer = Slicer(
@@ -28,7 +55,9 @@ def slice(inp, opt_root, threshold, min_length, min_interval, hop_size, max_sil_
     )
     _max = float(_max)
     alpha = float(alpha)
-    for inp_path in input[int(i_part) :: int(all_part)]:
+    if all_part is None:
+        all_part = len(f_inputs)
+    for inp_path in f_inputs[int(i_part) :: int(all_part)]:
         # print(inp_path)
         try:
             name = os.path.basename(inp_path)

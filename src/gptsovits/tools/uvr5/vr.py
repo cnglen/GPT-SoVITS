@@ -9,11 +9,11 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from lib.lib_v5 import nets_61968KB as Nets
-from lib.lib_v5 import spec_utils
-from lib.lib_v5.model_param_init import ModelParameters
-from lib.lib_v5.nets_new import CascadedNet
-from lib.utils import inference
+from gptsovits.tools.uvr5.lib.lib_v5 import nets_61968KB as Nets
+from gptsovits.tools.uvr5.lib.lib_v5 import spec_utils
+from gptsovits.tools.uvr5.lib.lib_v5.model_param_init import ModelParameters
+from gptsovits.tools.uvr5.lib.lib_v5.nets_new import CascadedNet
+from gptsovits.tools.uvr5.lib.utils import inference
 
 
 class AudioPre:
@@ -86,9 +86,7 @@ class AudioPre:
             )
             # pdb.set_trace()
             if d == bands_n and self.data["high_end_process"] != "none":
-                input_high_end_h = (bp["n_fft"] // 2 - bp["crop_stop"]) + (
-                    self.mp.param["pre_filter_stop"] - self.mp.param["pre_filter_start"]
-                )
+                input_high_end_h = (bp["n_fft"] // 2 - bp["crop_stop"]) + (self.mp.param["pre_filter_stop"] - self.mp.param["pre_filter_start"])
                 input_high_end = X_spec_s[d][:, bp["n_fft"] // 2 - input_high_end_h : bp["n_fft"] // 2, :]
 
         X_spec_m = spec_utils.combine_spectrograms(X_spec_s, self.mp)
@@ -112,9 +110,7 @@ class AudioPre:
         if ins_root is not None:
             if self.data["high_end_process"].startswith("mirroring"):
                 input_high_end_ = spec_utils.mirroring(self.data["high_end_process"], y_spec_m, input_high_end, self.mp)
-                wav_instrument = spec_utils.cmb_spectrogram_to_wave(
-                    y_spec_m, self.mp, input_high_end_h, input_high_end_
-                )
+                wav_instrument = spec_utils.cmb_spectrogram_to_wave(y_spec_m, self.mp, input_high_end_h, input_high_end_)
             else:
                 wav_instrument = spec_utils.cmb_spectrogram_to_wave(y_spec_m, self.mp)
             logger.info("%s instruments done" % name)
@@ -210,9 +206,7 @@ class AudioPreDeEcho:
         self.mp = mp
         self.model = model
 
-    def _path_audio_(
-        self, music_file, vocal_root=None, ins_root=None, format="flac", is_hp3=False
-    ):  # 3个VR模型vocal和ins是反的
+    def _path_audio_(self, music_file, vocal_root=None, ins_root=None, format="flac", is_hp3=False):  # 3个VR模型vocal和ins是反的
         if ins_root is None and vocal_root is None:
             return "No save root."
         name = os.path.basename(music_file)
@@ -256,9 +250,7 @@ class AudioPreDeEcho:
             )
             # pdb.set_trace()
             if d == bands_n and self.data["high_end_process"] != "none":
-                input_high_end_h = (bp["n_fft"] // 2 - bp["crop_stop"]) + (
-                    self.mp.param["pre_filter_stop"] - self.mp.param["pre_filter_start"]
-                )
+                input_high_end_h = (bp["n_fft"] // 2 - bp["crop_stop"]) + (self.mp.param["pre_filter_stop"] - self.mp.param["pre_filter_start"])
                 input_high_end = X_spec_s[d][:, bp["n_fft"] // 2 - input_high_end_h : bp["n_fft"] // 2, :]
 
         X_spec_m = spec_utils.combine_spectrograms(X_spec_s, self.mp)
@@ -279,9 +271,7 @@ class AudioPreDeEcho:
         if ins_root is not None:
             if self.data["high_end_process"].startswith("mirroring"):
                 input_high_end_ = spec_utils.mirroring(self.data["high_end_process"], y_spec_m, input_high_end, self.mp)
-                wav_instrument = spec_utils.cmb_spectrogram_to_wave(
-                    y_spec_m, self.mp, input_high_end_h, input_high_end_
-                )
+                wav_instrument = spec_utils.cmb_spectrogram_to_wave(y_spec_m, self.mp, input_high_end_h, input_high_end_)
             else:
                 wav_instrument = spec_utils.cmb_spectrogram_to_wave(y_spec_m, self.mp)
             logger.info("%s instruments done" % name)

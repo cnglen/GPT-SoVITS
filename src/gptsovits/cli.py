@@ -10,18 +10,21 @@ import json
 import logging
 import os
 import re
-import sys
 import traceback
 from time import time as ttime
 from typing import Optional, Tuple
 
+import ffmpeg
 import librosa
 import numpy as np
 import soundfile as sf
 import torch
 import torchaudio
+from funasr import AutoModel
 from peft import LoraConfig, get_peft_model
 from pylightkit.utils import get_logger
+from rich.progress import track
+from scipy.io import wavfile
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 from gptsovits.AR.models.t2s_lightning_module import Text2SemanticLightningModule
@@ -35,11 +38,283 @@ from gptsovits.text.cleaner import clean_text
 from gptsovits.text.LangSegmenter import LangSegmenter
 from gptsovits.tools.audio_sr import AP_BWE
 from gptsovits.tools.i18n.i18n import I18nAuto
+from gptsovits.tools.my_utils import clean_path, load_audio
+from gptsovits.tools.slicer2 import Slicer
+from gptsovits.tools.uvr5.bsroformer import Roformer_Loader
+from gptsovits.tools.uvr5.mdxnet import MDXNetDereverb
+from gptsovits.tools.uvr5.vr import AudioPre, AudioPreDeEcho
 
 PATH_SOVITS_V3 = os.path.join(os.path.dirname(__file__), "pretrained_models/s2Gv3.pth")
 PATH_SOVITS_V4 = os.path.join(os.path.dirname(__file__), "pretrained_models/gsv-v4-pretrained/s2Gv4.pth")
 F_WEIGHT = os.path.join(os.path.dirname(__file__), "weight.json")
-print(PATH_SOVITS_V3)
+
+WEIGHT_UVR5_ROOT = os.path.join(os.path.dirname(__file__), "tools/uvr5/uvr5_weights")
+
+
+class ASRWorker:
+    def __init__(
+        self,
+        model_name: str = "xxx",
+        model_size: str = "large",
+        model_language: str = "zh",
+        precision: str = "float32",
+        device: str | None = None,
+        is_half: bool = False,
+    ):
+        self.model_name, self.model_size, self.model_language, self.precision = model_name, model_size, model_language, precision
+        self.is_half = is_half
+
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+
+        self.logger = get_logger("asr", f_log="/tmp/asr.log", f_error="/tmp/asr.error")
+        self.model = self.load_funasr_model()
+
+    def load_funasr_model(self, language: str = "zh"):
+        D_ASR_MODELS = os.path.join(os.path.dirname(__file__), "tools/asr/models")
+        path_vad = os.path.join(D_ASR_MODELS, "speech_fsmn_vad_zh-cn-16k-common-pytorch")
+        path_punc = os.path.join(D_ASR_MODELS, "punc_ct-transformer_zh-cn-common-vocab272727-pytorch")
+        path_vad = path_vad if os.path.exists(path_vad) else "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
+        path_punc = path_punc if os.path.exists(path_punc) else "iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch"
+        vad_model_revision = punc_model_revision = "v2.0.4"
+
+        if language == "zh":
+            path_asr = os.path.join(D_ASR_MODELS, "speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch")
+            path_asr = path_asr if os.path.exists(path_asr) else "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+            model_revision = "v2.0.4"
+        elif language == "yue":
+            path_asr = os.path.join(D_ASR_MODELS, "speech_UniASR_asr_2pass-cantonese-CHS-16k-common-vocab1468-tensorflow1-online")
+            path_asr = path_asr if os.path.exists(path_asr) else "iic/speech_UniASR_asr_2pass-cantonese-CHS-16k-common-vocab1468-tensorflow1-online"
+            model_revision = "master"
+            path_vad = path_punc = None
+            vad_model_revision = punc_model_revision = None
+            ###友情提示：粤语带VAD识别可能会有少量shape不对报错的，但是不带VAD可以.不带vad只能分阶段单独加标点。不过标点模型对粤语效果真的不行…
+        else:
+            raise ValueError("FunASR 不支持该语言" + ": " + language)
+
+        model = AutoModel(
+            model=path_asr,
+            model_revision=model_revision,
+            vad_model=path_vad,
+            vad_model_revision=vad_model_revision,
+            punc_model=path_punc,
+            punc_model_revision=punc_model_revision,
+            disable_pbar=True,
+        )
+        self.logger.info(f"FunASR 模型加载完成: {language.upper()}")
+        return model
+
+    def run(self, d_input: str, d_output: str = "/tmp/asr_output", language: str = "zh"):
+        paths = sorted([os.path.join(d_input, name) for name in os.listdir(d_input)])
+        output = []
+        output_file_name = os.path.basename(d_input)
+
+        for f_input in track(paths, description="asr", total=len(paths)):
+            if not os.path.isfile(f_input):
+                continue
+
+            try:
+                text = self.model.generate(input=f_input)[0]["text"]
+                output.append(f"{f_input}|{output_file_name}|{language.upper()}|{text}")
+            except Exception as e:
+                self.logger.error(e)
+                self.logger.error(traceback.format_exc())
+
+        os.makedirs(d_output, exist_ok=True)
+        output_file_path = os.path.abspath(f"{d_output}/{output_file_name}.list")
+
+        with open(output_file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(output))
+            self.logger.info(f"ASR 任务完成->标注文件路径: {output_file_path}")
+        return output_file_path
+
+
+class SliceWorker:
+    """
+    Args:
+      threshold: 音量小于这个值视作静音的备选切割点
+      min_length: 每段最小多长，如果第一段太短一直和后面段连起来直到超过这个值
+      min_interval: 最短切割间隔
+      hop_size: 怎么算音量曲线，越小精度越大计算量越高（不是精度越大效果越好）
+      max_sil_kept: 切完后静音最多留多长
+    """
+
+    def __init__(
+        self,
+        sample_rate: int = 32000,
+        threshold: int = -40,
+        min_length: int = 4000,
+        min_interval: int = 300,
+        hop_size: int = 10,
+        max_sil_kept: int = 500,
+    ):
+        self.slicer = Slicer(
+            sr=sample_rate,  # 长音频采样率
+            threshold=threshold,  # 音量小于这个值视作静音的备选切割点
+            min_length=min_length,  # 每段最小多长，如果第一段太短一直和后面段连起来直到超过这个值
+            min_interval=min_interval,  # 最短切割间隔
+            hop_size=hop_size,  # 怎么算音量曲线，越小精度越大计算量越高（不是精度越大效果越好）
+            max_sil_kept=max_sil_kept,  # 切完后静音最多留多长
+        )
+        self.logger = get_logger("slicer", f_log="/tmp/slicer.log", f_error="/tmp/slicer.error")
+
+    def run(self, d_input: str, d_output: str = "/tmp/slice_output", max_value: float = 0.90, alpha: float = 0.25):
+        """
+        Args:
+          d_input:
+          max_value: 归一化后最大值多少
+          alpha: 混多少比例归一化后音频进来 0.25,
+        """
+        os.makedirs(d_output, exist_ok=True)
+        paths = [os.path.join(d_input, name) for name in os.listdir(d_input)]
+        for f_input in paths:
+            try:
+                name = os.path.basename(f_input)
+                audio = load_audio(f_input, 32000)
+                for chunk, i_start, i_end in track(self.slicer.slice(audio), description=f_input):  # i_start和i_end是帧数
+                    tmp_max = np.abs(chunk).max()
+                    if tmp_max > 1:
+                        chunk /= tmp_max
+                    chunk = (chunk / tmp_max * (max_value * alpha)) + (1 - alpha) * chunk
+                    wavfile.write(
+                        "%s/%s_%010d_%010d.wav" % (d_output, name, i_start, i_end),
+                        32000,
+                        # chunk.astype(np.float32),
+                        (chunk * 32767).astype(np.int16),
+                    )
+                self.logger.info("%s -> success", f_input)
+            except Exception as e:
+                self.logger.error(e)
+                self.logger.error("%s -> fail", f_input, traceback.format_exc())
+
+
+class Uvr5Worker:
+    """
+    人声伴奏分离
+
+    model_name:
+      - onnx_dereverb_By_FoxJoy: 非常慢，对于双通道混响是最好的选择，不能去除单通道混响
+      - model_bs_roformer_ep_317_sdr_12.9755: 极慢
+      - HP5_only_main_vocal
+      - VR-DeEchoAggressive
+      - VR-DeEchoDeReverb
+      - VR-DeEchoNormal
+    """
+
+    def __init__(
+        self,
+        model_name: str = "HP5_only_main_vocal",
+        agg: int = 10,
+        format0: str = "wav",
+        device: str | None = None,
+        is_half: bool = False,
+    ):
+        self.model_name = model_name
+        self.is_hp3 = "HP3" in model_name
+        self.agg = agg
+        self.format0 = format0
+        self.logger = get_logger("uvr5", f_log="/tmp/uvr5.log", f_error="/tmp/uvr5.error")
+        self.is_half = is_half
+
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+
+        uvr5_names = []
+        for name in os.listdir(WEIGHT_UVR5_ROOT):
+            if name.endswith(".pth") or name.endswith(".ckpt") or "onnx" in name:
+                uvr5_names.append(name.replace(".pth", "").replace(".ckpt", ""))
+        self.logger.info("uvr5_names = %s", uvr5_names)
+        self.logger.info("  model_name:%s", model_name)
+
+    def run(self, d_input: str, d_output_vocal: str = "/tmp/uvr5_output_vocal", d_output_other: str = "/tmp/uvr5_output_other"):
+        """
+        vocal separation/deecho/dereverb
+
+        Args:
+          d_input: 输入文件夹
+          d_output_voal: 人声文件夹
+          d_output_other:  非人声文件夹爱
+        """
+        tic = ttime()
+        if self.model_name == "onnx_dereverb_By_FoxJoy":
+            pre_fun = MDXNetDereverb(chunks=15)
+        elif "roformer" in self.model_name.lower():
+            func = Roformer_Loader
+            pre_fun = func(
+                model_path=os.path.join(WEIGHT_UVR5_ROOT, self.model_name + ".ckpt"),
+                config_path=os.path.join(WEIGHT_UVR5_ROOT, self.model_name + ".yaml"),
+                device=self.device,
+                is_half=self.is_half,
+            )
+            if not os.path.exists(os.path.join(WEIGHT_UVR5_ROOT, self.model_name + ".yaml")):
+                self.logger.warning(
+                    """Warning: You are using a model without a configuration file. The program will automatically use the default configuration file. However, the default configuration file cannot guarantee that all models will run successfully.
+                    You can manually place the model configuration file into 'tools/uvr5/uvr5w_weights' and ensure that the configuration file is named as '<model_name>.yaml' then try it again. (For example, the configuration file corresponding to the model 'bs_roformer_ep_368_sdr_12.9628.ckpt' should be 'bs_roformer_ep_368_sdr_12.9628.yaml'.)
+                    Or you can just ignore this warning."""
+                )
+        else:
+            func = AudioPre if "DeEcho" not in self.model_name else AudioPreDeEcho
+            pre_fun = func(
+                agg=int(self.agg),
+                model_path=os.path.join(WEIGHT_UVR5_ROOT, self.model_name + ".pth"),
+                device=self.device,
+                is_half=self.is_half,
+            )
+
+        paths = [os.path.join(d_input, name) for name in os.listdir(d_input)]
+        for f_input in paths:
+            if not os.path.isfile(f_input):
+                continue
+
+            need_reformat, done = True, False
+            try:
+                info = ffmpeg.probe(f_input, cmd="ffprobe")
+                if info["streams"][0]["channels"] == 2 and info["streams"][0]["sample_rate"] == "44100":
+                    need_reformat = False
+            except Exception as e:
+                need_reformat = True
+                self.logger.error("ffprobe: %s -> %s", f_input, traceback.print_exc())
+            if need_reformat:
+                tmp_path = "%s/%s.reformatted.wav" % (
+                    os.path.join(os.environ.get("TEMP", "/tmp")),
+                    os.path.basename(f_input),
+                )
+                if not os.path.exists(tmp_path):
+                    cmd_reformat = f'ffmpeg -i "{f_input}" -vn -acodec pcm_s16le -ac 2 -ar 44100 "{tmp_path}" -y'
+                    self.logger.info("reformat by %s", cmd_reformat)
+                    os.system(cmd_reformat)
+                else:
+                    self.logger.warning("re-using %s", tmp_path)
+
+                f_input_ = tmp_path
+            else:
+                f_input_ = f_input
+
+            try:
+                pre_fun._path_audio_(f_input_, d_output_other, d_output_vocal, self.format0, self.is_hp3)
+                toc = ttime()
+                self.logger.info("%s -> Success (%5.2f seconds by %s)", f_input, toc - tic, self.model_name)
+            except Exception as _:
+                toc = ttime()
+                self.logger.error("%s -> Failed  (%5.2f seconds by %s)\n  %s", f_input, toc - tic, self.model_name, traceback.format_exc())
+
+            # # try:
+            if self.model_name == "onnx_dereverb_By_FoxJoy":
+                del pre_fun.pred.model
+                del pre_fun.pred.model_
+            else:
+                del pre_fun.model
+                del pre_fun
+            # # except:
+            # #     traceback.print_exc()
+
+            if torch.cuda.is_available():
+                self.logger.info("clean_empty_cache")
+                torch.cuda.empty_cache()
 
 
 class DictToAttrRecursive(dict):

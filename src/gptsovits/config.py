@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 import torch
 
@@ -11,10 +11,12 @@ is_half = True if is_half_str.lower() == "true" else False
 is_share_str = os.environ.get("is_share", "False")
 is_share = True if is_share_str.lower() == "true" else False
 
-cnhubert_path = "GPT_SoVITS/pretrained_models/chinese-hubert-base"
-bert_path = "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large"
-pretrained_sovits_path = "GPT_SoVITS/pretrained_models/s2G488k.pth"
-pretrained_gpt_path = "GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"
+D_PRETRAINED_MODELS = os.path.abspath(os.path.join(os.path.dirname(__file__), "pretrained_models"))
+
+cnhubert_path = os.path.join(D_PRETRAINED_MODELS, "chinese-hubert-base")
+bert_path = os.path.join(D_PRETRAINED_MODELS, "chinese-roberta-wwm-ext-large")
+pretrained_sovits_path = os.path.join(D_PRETRAINED_MODELS, "s2G488k.pth")
+pretrained_gpt_path = os.path.join(D_PRETRAINED_MODELS, "s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt")
 
 exp_root = "logs"
 python_exec = sys.executable or "python"

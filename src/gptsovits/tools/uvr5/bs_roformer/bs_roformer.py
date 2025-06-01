@@ -1,21 +1,20 @@
 from functools import partial
+from typing import Callable, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
+from einops import pack, rearrange, unpack
+from einops.layers.torch import Rearrange
+from gptsovits.tools.uvr5.bs_roformer.attend import Attend
+from rotary_embedding_torch import RotaryEmbedding
 from torch import nn
 from torch.nn import Module, ModuleList
-import torch.nn.functional as F
-
-from bs_roformer.attend import Attend
 from torch.utils.checkpoint import checkpoint
 
-from typing import Tuple, Optional, Callable
 # from beartype.typing import Tuple, Optional, List, Callable
 # from beartype import beartype
 
-from rotary_embedding_torch import RotaryEmbedding
 
-from einops import rearrange, pack, unpack
-from einops.layers.torch import Rearrange
 
 # helper functions
 
@@ -120,9 +119,7 @@ class LinearAttention(Module):
         dim_inner = dim_head * heads
         self.norm = RMSNorm(dim)
 
-        self.to_qkv = nn.Sequential(
-            nn.Linear(dim, dim_inner * 3, bias=False), Rearrange("b n (qkv h d) -> qkv b h d n", qkv=3, h=heads)
-        )
+        self.to_qkv = nn.Sequential(nn.Linear(dim, dim_inner * 3, bias=False), Rearrange("b n (qkv h d) -> qkv b h d n", qkv=3, h=heads))
 
         self.temperature = nn.Parameter(torch.ones(heads, 1, 1))
 
@@ -390,30 +387,22 @@ class BSRoformer(Module):
             tran_modules = []
             if linear_transformer_depth > 0:
                 tran_modules.append(Transformer(depth=linear_transformer_depth, linear_attn=True, **transformer_kwargs))
-            tran_modules.append(
-                Transformer(depth=time_transformer_depth, rotary_embed=time_rotary_embed, **transformer_kwargs)
-            )
-            tran_modules.append(
-                Transformer(depth=freq_transformer_depth, rotary_embed=freq_rotary_embed, **transformer_kwargs)
-            )
+            tran_modules.append(Transformer(depth=time_transformer_depth, rotary_embed=time_rotary_embed, **transformer_kwargs))
+            tran_modules.append(Transformer(depth=freq_transformer_depth, rotary_embed=freq_rotary_embed, **transformer_kwargs))
             self.layers.append(nn.ModuleList(tran_modules))
 
         self.final_norm = RMSNorm(dim)
 
-        self.stft_kwargs = dict(
-            n_fft=stft_n_fft, hop_length=stft_hop_length, win_length=stft_win_length, normalized=stft_normalized
-        )
+        self.stft_kwargs = dict(n_fft=stft_n_fft, hop_length=stft_hop_length, win_length=stft_win_length, normalized=stft_normalized)
 
         self.stft_window_fn = partial(default(stft_window_fn, torch.hann_window), stft_win_length)
 
-        freqs = torch.stft(
-            torch.randn(1, 4096), **self.stft_kwargs, window=torch.ones(stft_win_length), return_complex=True
-        ).shape[1]
+        freqs = torch.stft(torch.randn(1, 4096), **self.stft_kwargs, window=torch.ones(stft_win_length), return_complex=True).shape[1]
 
         assert len(freqs_per_bands) > 1
-        assert sum(freqs_per_bands) == freqs, (
-            f"the number of freqs in the bands must equal {freqs} based on the STFT settings, but got {sum(freqs_per_bands)}"
-        )
+        assert (
+            sum(freqs_per_bands) == freqs
+        ), f"the number of freqs in the bands must equal {freqs} based on the STFT settings, but got {sum(freqs_per_bands)}"
 
         freqs_per_bands_with_complex = tuple(2 * f * self.audio_channels for f in freqs_per_bands)
 
@@ -462,9 +451,9 @@ class BSRoformer(Module):
             raw_audio = rearrange(raw_audio, "b t -> b 1 t")
 
         channels = raw_audio.shape[1]
-        assert (not self.stereo and channels == 1) or (self.stereo and channels == 2), (
-            "stereo needs to be set to True if passing in audio signal that is stereo (channel dimension of 2). also need to be False if mono (channel dimension of 1)"
-        )
+        assert (not self.stereo and channels == 1) or (
+            self.stereo and channels == 2
+        ), "stereo needs to be set to True if passing in audio signal that is stereo (channel dimension of 2). also need to be False if mono (channel dimension of 1)"
 
         # to stft
 
@@ -568,9 +557,7 @@ class BSRoformer(Module):
 
         # same as torch.stft() fix for MacOS MPS above
         try:
-            recon_audio = torch.istft(
-                stft_repr, **self.stft_kwargs, window=stft_window, return_complex=False, length=raw_audio.shape[-1]
-            )
+            recon_audio = torch.istft(stft_repr, **self.stft_kwargs, window=stft_window, return_complex=False, length=raw_audio.shape[-1])
         except:
             recon_audio = torch.istft(
                 stft_repr.cpu() if x_is_mps else stft_repr,

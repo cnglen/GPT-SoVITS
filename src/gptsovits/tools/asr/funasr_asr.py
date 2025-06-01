@@ -31,19 +31,11 @@ def create_model(language="zh"):
 
     if language == "zh":
         path_asr = "tools/asr/models/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-        path_asr = (
-            path_asr
-            if os.path.exists(path_asr)
-            else "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-        )
+        path_asr = path_asr if os.path.exists(path_asr) else "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
         model_revision = "v2.0.4"
     elif language == "yue":
         path_asr = "tools/asr/models/speech_UniASR_asr_2pass-cantonese-CHS-16k-common-vocab1468-tensorflow1-online"
-        path_asr = (
-            path_asr
-            if os.path.exists(path_asr)
-            else "iic/speech_UniASR_asr_2pass-cantonese-CHS-16k-common-vocab1468-tensorflow1-online"
-        )
+        path_asr = path_asr if os.path.exists(path_asr) else "iic/speech_UniASR_asr_2pass-cantonese-CHS-16k-common-vocab1468-tensorflow1-online"
         model_revision = "master"
         path_vad = path_punc = None
         vad_model_revision = punc_model_revision = None
@@ -98,17 +90,11 @@ def execute_asr(input_folder, output_folder, model_size, language):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-i", "--input_folder", type=str, required=True, help="Path to the folder containing WAV files."
-    )
+    parser.add_argument("-i", "--input_folder", type=str, required=True, help="Path to the folder containing WAV files.")
     parser.add_argument("-o", "--output_folder", type=str, required=True, help="Output folder to store transcriptions.")
     parser.add_argument("-s", "--model_size", type=str, default="large", help="Model Size of FunASR is Large")
-    parser.add_argument(
-        "-l", "--language", type=str, default="zh", choices=["zh", "yue", "auto"], help="Language of the audio files."
-    )
-    parser.add_argument(
-        "-p", "--precision", type=str, default="float16", choices=["float16", "float32"], help="fp16 or fp32"
-    )  # 还没接入
+    parser.add_argument("-l", "--language", type=str, default="zh", choices=["zh", "yue", "auto"], help="Language of the audio files.")
+    parser.add_argument("-p", "--precision", type=str, default="float16", choices=["float16", "float32"], help="fp16 or fp32")  # 还没接入
     cmd = parser.parse_args()
     execute_asr(
         input_folder=cmd.input_folder,

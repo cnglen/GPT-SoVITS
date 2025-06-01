@@ -20,7 +20,7 @@ def scan_language_list():
 
 
 class I18nAuto:
-    def __init__(self, language=None):
+    def __init__(self, language="zh_CN"):
         if language in ["Auto", None]:
             language = locale.getdefaultlocale()[0]
             # getlocale can't identify the system's language ((None, None))
