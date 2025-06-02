@@ -4,13 +4,13 @@
 """
 推理
 """
-
 import argparse
 import json
 import logging
 import os
 import re
 import traceback
+from pathlib import Path
 from time import time as ttime
 from typing import Optional, Tuple
 
@@ -22,7 +22,7 @@ import torch
 import torchaudio
 from funasr import AutoModel
 from peft import LoraConfig, get_peft_model
-from pylightkit.utils import get_logger
+from pylightkit.utils import full_path, get_logger
 from rich.progress import track
 from scipy.io import wavfile
 from transformers import AutoModelForMaskedLM, AutoTokenizer
@@ -107,6 +107,7 @@ class ASRWorker:
         return model
 
     def run(self, d_input: str, d_output: str = "/tmp/asr_output", language: str = "zh"):
+        d_input, d_output = full_path(d_input), full_path(d_output)
         paths = sorted([os.path.join(d_input, name) for name in os.listdir(d_input)])
         output = []
         output_file_name = os.path.basename(d_input)
@@ -117,6 +118,9 @@ class ASRWorker:
 
             try:
                 text = self.model.generate(input=f_input)[0]["text"]
+                f_input_text = os.path.join(os.path.dirname(f_input), Path(f_input).stem + ".txt")
+                with open(f_input_text, "w") as f:
+                    f.write(text)
                 output.append(f"{f_input}|{output_file_name}|{language.upper()}|{text}")
             except Exception as e:
                 self.logger.error(e)
@@ -136,7 +140,7 @@ class SliceWorker:
     Args:
       threshold: 音量小于这个值视作静音的备选切割点
       min_length: 每段最小多长，如果第一段太短一直和后面段连起来直到超过这个值
-      min_interval: 最短切割间隔
+      min_interval: 最短切割间隔, The minimum milliseconds for a silence part to be sliced
       hop_size: 怎么算音量曲线，越小精度越大计算量越高（不是精度越大效果越好）
       max_sil_kept: 切完后静音最多留多长
     """
@@ -162,16 +166,19 @@ class SliceWorker:
 
     def run(self, d_input: str, d_output: str = "/tmp/slice_output", max_value: float = 0.90, alpha: float = 0.25):
         """
+        将`d_input`目录下的音频文件切片, 输出到`d_output`
+
         Args:
-          d_input:
+          d_input: 输入目录
           max_value: 归一化后最大值多少
           alpha: 混多少比例归一化后音频进来 0.25,
         """
+        d_input, d_output = full_path(d_input), full_path(d_output)
         os.makedirs(d_output, exist_ok=True)
-        paths = [os.path.join(d_input, name) for name in os.listdir(d_input)]
+        paths = [os.path.join(d_input, name) for name in os.listdir(d_input) if os.path.isfile(os.path.join(d_input, name))]
         for f_input in paths:
             try:
-                name = os.path.basename(f_input)
+                name = Path(f_input).stem
                 audio = load_audio(f_input, 32000)
                 for chunk, i_start, i_end in track(self.slicer.slice(audio), description=f_input):  # i_start和i_end是帧数
                     tmp_max = np.abs(chunk).max()
@@ -239,6 +246,8 @@ class Uvr5Worker:
           d_output_voal: 人声文件夹
           d_output_other:  非人声文件夹爱
         """
+        d_input, d_output_vocal, d_output_other = full_path(d_input), full_path(d_output_vocal), full_path(d_output_other)
+
         tic = ttime()
         if self.model_name == "onnx_dereverb_By_FoxJoy":
             pre_fun = MDXNetDereverb(chunks=15)
@@ -264,6 +273,7 @@ class Uvr5Worker:
                 device=self.device,
                 is_half=self.is_half,
             )
+        self.logger.info("pre_fun: %s", pre_fun)
 
         paths = [os.path.join(d_input, name) for name in os.listdir(d_input)]
         for f_input in paths:
@@ -279,9 +289,9 @@ class Uvr5Worker:
                 need_reformat = True
                 self.logger.error("ffprobe: %s -> %s", f_input, traceback.print_exc())
             if need_reformat:
-                tmp_path = "%s/%s.reformatted.wav" % (
+                tmp_path = "%s/%s_reformatted.wav" % (
                     os.path.join(os.environ.get("TEMP", "/tmp")),
-                    os.path.basename(f_input),
+                    Path(f_input).stem,
                 )
                 if not os.path.exists(tmp_path):
                     cmd_reformat = f'ffmpeg -i "{f_input}" -vn -acodec pcm_s16le -ac 2 -ar 44100 "{tmp_path}" -y'
@@ -302,19 +312,20 @@ class Uvr5Worker:
                 toc = ttime()
                 self.logger.error("%s -> Failed  (%5.2f seconds by %s)\n  %s", f_input, toc - tic, self.model_name, traceback.format_exc())
 
-            # # try:
+        try:
             if self.model_name == "onnx_dereverb_By_FoxJoy":
                 del pre_fun.pred.model
                 del pre_fun.pred.model_
             else:
                 del pre_fun.model
                 del pre_fun
-            # # except:
-            # #     traceback.print_exc()
+        except Exception as e:
+            self.logger.error(e)
+            self.logger.error(traceback.print_exc())
 
-            if torch.cuda.is_available():
-                self.logger.info("clean_empty_cache")
-                torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            self.logger.info("clean_empty_cache")
+            torch.cuda.empty_cache()
 
 
 class DictToAttrRecursive(dict):
